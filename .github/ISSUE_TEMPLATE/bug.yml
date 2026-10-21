@@ -1,0 +1,23 @@
+name: Ошибка
+description: Что-то считается неправильно или не работает
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Что случилось
+      description: Что ты сделал и что получилось
+      placeholder: Взял карту «Ничего лишнего», снял броню, а пороги не поменялись
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Как должно быть
+      description: Можно со ссылкой на правило или карту на ru.daggerheart.su
+  - type: textarea
+    id: code
+    attributes:
+      label: Код персонажа (необязательно)
+      description: Лист → Сохранение → «Скопировать код персонажа», вставь сюда. Так проще воспроизвести.
+      render: json

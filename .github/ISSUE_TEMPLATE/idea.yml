@@ -1,0 +1,16 @@
+name: Идея или вопрос
+description: Чего не хватает, что неудобно, что непонятно
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Что хочется
+      placeholder: Хочу кнопку «выпить зелье», чтобы оно само снимало Раны
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Зачем
+      description: Когда это пригодится в игре
