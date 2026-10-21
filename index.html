@@ -206,11 +206,21 @@ details > div{padding:0 12px 12px;display:grid;gap:8px}
 .linklike:hover h3{color:var(--accent)}
 details > summary{line-height:1.4}
 .ref-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
-.ref-item{border:1px solid var(--line);border-radius:8px;background:var(--raised);padding:10px 12px;display:flex;flex-direction:column;gap:6px;align-self:start;min-width:0}
-.ref-list{align-items:start}
-.ref-more{border:0;background:transparent}
-.ref-more > summary{padding:2px 0;color:var(--accent)}
-.ref-more > div{padding:6px 0 0}
+
+.ref-list{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));grid-auto-rows:190px}
+.ref-item{border:1px solid var(--line);border-radius:10px;background:var(--raised);padding:12px 14px;display:flex;flex-direction:column;gap:6px;text-align:left;font-weight:400;overflow:hidden;position:relative;height:100%;min-width:0;cursor:pointer}
+.ref-item:hover{border-color:var(--accent)}
+.ref-title{display:flex;gap:8px;align-items:center;min-width:0}
+.ref-title b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ref-short{font-size:.9rem;color:var(--muted);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45}
+.ref-flag{position:absolute;right:10px;bottom:10px}
+#ref-dlg{border:1px solid var(--line);border-radius:14px;padding:0;background:var(--panel);color:var(--ink);width:min(980px,calc(100vw - 48px));height:min(88dvh,900px);max-height:calc(100dvh - 32px)}
+#ref-dlg .dlg-in{height:100%;box-sizing:border-box;align-content:start}
+#ref-dlg::backdrop{background:rgba(5,12,16,.55)}
+#ref-dlg .dlg-in{padding:18px 22px 22px;display:grid;gap:12px;max-height:calc(100dvh - 50px);overflow:auto}
+#ref-dlg .dlg-head{position:sticky;top:-18px;background:var(--panel);padding:6px 0;z-index:1}
+#ref-dlg .dlg-full{border-top:1px dashed var(--line);padding-top:12px}
+@media (max-width:600px){.ref-list{grid-auto-rows:170px}#ref-dlg{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;border-radius:0;margin:0}#ref-dlg .dlg-in{max-height:100dvh;padding:calc(12px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px))}}
 .chipbtn.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .foot{margin-top:28px;font-size:.8rem;color:var(--muted);max-width:80ch}
 .empty{padding:16px;border:1px dashed var(--line);border-radius:var(--r);color:var(--muted);text-align:center}

@@ -694,10 +694,19 @@ const REF_TYPES = [['all', 'Всё'], ['rule', 'Правила'], ['card', 'Ка
 function renderRef() {
   return `<div class="stack"><h1>Справочник</h1><input id="ref-q" placeholder="Поиск: правило, карта, оружие, предмет, родословная…" value="${esc(refQuery)}" aria-label="Поиск по справочнику">
     <div class="row" role="group" aria-label="Тип">${REF_TYPES.map(([k, n]) => `<button class="chipbtn ${refType === k ? 'sel' : ''}" data-reftype="${k}" aria-pressed="${refType === k}">${n}</button>`).join('')}</div>
-    <div id="ref-res">${refResults()}</div>
+    <div id="ref-res">${refResults()}</div><dialog id="ref-dlg" aria-label="Карточка справочника"></dialog>
     <p class="foot">Данные: Daggerheart SRD 1.0 в переводе ru.daggerheart.su. This product includes materials from the Daggerheart System Reference Document 1.0, © Critical Role, LLC, under the terms of the Darrington Press Community Gaming (DPCGL) License. Неофициальный фанатский инструмент. Иконки: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a>, CC BY 3.0, авторы: ${(window.DH_ICON_AUTHORS || []).map(esc).join(', ')}. Оригинальный арт смотри по ссылкам «На сайте».</p></div>`;
 }
-let REF_INDEX = null;
+let REF_INDEX = null, REF_SHOWN = [], refOpenIdx = -1;
+function refOpen(i) {
+  const dlg = $('#ref-dlg'); if (!dlg || !REF_SHOWN[i]) return;
+  refOpenIdx = i; const { e } = REF_SHOWN[i];
+  dlg.innerHTML = `<div class="dlg-in"><div class="spread dlg-head"><span class="lbl">${esc(e.kind)}</span><span class="row"><button class="ghost" data-refnav="-1" aria-label="Предыдущая" ${i ? '' : 'disabled'}>←</button><span class="small muted">${i + 1} из ${REF_SHOWN.length}</span><button class="ghost" data-refnav="1" aria-label="Следующая" ${i < REF_SHOWN.length - 1 ? '' : 'disabled'}>→</button><button class="ghost" data-refclose="1" aria-label="Закрыть">✕</button></span></div>
+    <h2 class="row" style="gap:10px">${e.icon}${esc(e.title)}</h2><div class="rich">${e.short}</div>${e.full ? `<div class="rich dlg-full">${e.full}</div>` : ''}<div>${site(e.link)}</div></div>`;
+  if (!dlg.open) dlg.showModal();
+  dlg.querySelector('.dlg-in').scrollTop = 0;
+}
+function refClose() { const dlg = $('#ref-dlg'); hidePop(); document.body.appendChild(pop); if (dlg?.open) dlg.close(); refOpenIdx = -1; }
 function refIndex() {
   if (REF_INDEX) return REF_INDEX;
   const R = [];
@@ -729,10 +738,10 @@ function refResults() {
     .sort((a, b) => a[0] - b[0] || a[1].title.localeCompare(b[1].title, 'ru'));
   if (!hits.length) return `<div class="empty">Ничего не нашлось по «${esc(refQuery)}»${refType !== 'all' ? ' в этом разделе' : ''}.</div>`;
   const inText = hits.filter(([sc]) => sc === 3).length;
-  const card = ([sc, e]) => `<article class="ref-item"><span class="lbl">${esc(e.kind)}</span><span class="row" style="gap:8px;flex-wrap:nowrap">${e.icon}<b>${esc(e.title)}</b></span>
-    <div class="rich small">${e.short}</div>${e.full ? `<details class="ref-more"><summary>Подробнее</summary><div class="rich small">${e.full}</div></details>` : ''}
-    <div class="row small">${sc === 3 ? '<span class="chip">найдено в тексте</span>' : ''}${site(e.link)}</div></article>`;
-  return `<div class="muted small">Найдено: ${hits.length}${inText ? `, из них ${inText} по тексту` : ''}${hits.length > 80 ? '. Показаны первые 80, уточни запрос' : ''}</div><div class="ref-list">${hits.slice(0, 80).map(card).join('')}</div>`;
+  REF_SHOWN = hits.slice(0, 80).map(([sc, e]) => ({ sc, e }));
+  const card = ({ sc, e }, i) => `<button class="ref-item" data-refopen="${i}" aria-haspopup="dialog"><span class="lbl">${esc(e.kind)}</span><span class="ref-title">${e.icon}<b>${esc(e.title)}</b></span>
+    <span class="ref-short">${strip(e.short)}</span>${sc === 3 ? '<span class="chip ref-flag">найдено в тексте</span>' : ''}</button>`;
+  return `<div class="muted small">Найдено: ${hits.length}${inText ? `, из них ${inText} по тексту` : ''}${hits.length > 80 ? '. Показаны первые 80, уточни запрос' : ''}. Нажми на карточку, чтобы открыть целиком.</div><div class="ref-list">${REF_SHOWN.map(card).join('')}</div>`;
 }
 
 /* ---------- сохранение ---------- */
@@ -815,11 +824,14 @@ function showPop(el) {
   const full = r.full && strip(r.full).length > strip(r.d).length + 20;
   pop.innerHTML = `<div class="spread"><h4>${esc(r.t)}</h4><button class="ghost" data-act="pop-close" aria-label="Закрыть">✕</button></div><div class="rich">${r.d}</div>
     ${full ? `<details class="pop-more"><summary>Подробнее</summary><div class="rich">${r.full}</div></details>` : ''}<div>${site('/rule/' + id, 'Правило на сайте')}</div>`;
+  const dlg = $('#ref-dlg'), inDlg = dlg?.open && dlg.contains(el);
+  (inDlg ? dlg : document.body).appendChild(pop);
+  pop.style.position = inDlg ? 'fixed' : 'absolute';
   pop.hidden = false;
   const b = el.getBoundingClientRect();
   const w = pop.offsetWidth, vw = document.documentElement.clientWidth;
-  let left = b.left + window.scrollX; if (left + w > vw - 16) left = Math.max(16, vw - 16 - w);
-  pop.style.left = left + 'px'; pop.style.top = (b.bottom + window.scrollY + 6) + 'px';
+  let left = b.left + (inDlg ? 0 : window.scrollX); if (left + w > vw - 16) left = Math.max(16, vw - 16 - w);
+  pop.style.left = left + 'px'; pop.style.top = (b.bottom + (inDlg ? 0 : window.scrollY) + 6) + 'px';
 }
 function hidePop() { if (pop) pop.hidden = true; }
 
@@ -876,6 +888,9 @@ document.addEventListener('click', (e) => {
   const b = t.closest('button'); if (!b) return;
   const x = derive();
   if (b.dataset.gear) { C.view = 'build'; C.step = STEPS.findIndex((q) => q.id === 'gear'); save(); render(); window.scrollTo(0, 0); return; }
+  if (b.dataset.refopen != null) { if (refOpenIdx === +b.dataset.refopen && $('#ref-dlg')?.open) refClose(); else refOpen(+b.dataset.refopen); return; }
+  if (b.dataset.refnav) { refOpen(refOpenIdx + num(b.dataset.refnav)); return; }
+  if (b.dataset.refclose) { refClose(); return; }
   if (b.dataset.reftype) { refType = b.dataset.reftype; document.querySelectorAll('[data-reftype]').forEach((q) => { q.classList.toggle('sel', q.dataset.reftype === refType); q.setAttribute('aria-pressed', String(q.dataset.reftype === refType)); }); $('#ref-res').innerHTML = refResults(); return; }
   if (b.dataset.view) { C.view = b.dataset.view; save(); render(); window.scrollTo(0, 0); return; }
   if (b.dataset.step != null || b.dataset.go != null) { C.step = Math.max(0, Math.min(STEPS.length - 1, num(b.dataset.step ?? b.dataset.go))); save(); render(); window.scrollTo(0, 0); return; }
@@ -947,7 +962,9 @@ document.addEventListener('click', (e) => {
     resetArmed = false; C = blank(); save(); render(); window.scrollTo(0, 0);
   }
 });
+document.addEventListener('click', (e) => { const dlg = $('#ref-dlg'); if (dlg && e.target === dlg) refClose(); });
 document.addEventListener('keydown', (e) => {
+  if ($('#ref-dlg')?.open) { if (e.key === 'ArrowRight' && refOpenIdx < REF_SHOWN.length - 1) refOpen(refOpenIdx + 1); if (e.key === 'ArrowLeft' && refOpenIdx > 0) refOpen(refOpenIdx - 1); }
   if (e.key === 'Escape') hidePop();
   if (e.key === 'Enter' && e.target.id === 'hit-dmg') applyHit();
   if (e.key === 'Enter' && e.target.id === 'q-f') rollFormula(e.target.value);
