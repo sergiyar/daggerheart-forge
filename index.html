@@ -206,7 +206,12 @@ details > div{padding:0 12px 12px;display:grid;gap:8px}
 .linklike:hover h3{color:var(--accent)}
 details > summary{line-height:1.4}
 .ref-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
-.ref-item{border:1px solid var(--line);border-radius:8px;background:var(--raised);padding:10px 12px;display:grid;gap:4px}
+.ref-item{border:1px solid var(--line);border-radius:8px;background:var(--raised);padding:10px 12px;display:flex;flex-direction:column;gap:6px;align-self:start;min-width:0}
+.ref-list{align-items:start}
+.ref-more{border:0;background:transparent}
+.ref-more > summary{padding:2px 0;color:var(--accent)}
+.ref-more > div{padding:6px 0 0}
+.chipbtn.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .foot{margin-top:28px;font-size:.8rem;color:var(--muted);max-width:80ch}
 .empty{padding:16px;border:1px dashed var(--line);border-radius:var(--r);color:var(--muted);text-align:center}
 

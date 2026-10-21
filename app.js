@@ -689,27 +689,50 @@ function rollerHTML(x) {
 }
 
 /* ---------- справочник ---------- */
-let refQuery = '';
+let refQuery = '', refType = 'all';
+const REF_TYPES = [['all', 'Всё'], ['rule', 'Правила'], ['card', 'Карты'], ['weapon', 'Оружие'], ['armor', 'Броня'], ['item', 'Предметы'], ['anc', 'Родословные'], ['com', 'Сообщества'], ['beast', 'Звериные формы']];
 function renderRef() {
   return `<div class="stack"><h1>Справочник</h1><input id="ref-q" placeholder="Поиск: правило, карта, оружие, предмет, родословная…" value="${esc(refQuery)}" aria-label="Поиск по справочнику">
+    <div class="row" role="group" aria-label="Тип">${REF_TYPES.map(([k, n]) => `<button class="chipbtn ${refType === k ? 'sel' : ''}" data-reftype="${k}" aria-pressed="${refType === k}">${n}</button>`).join('')}</div>
     <div id="ref-res">${refResults()}</div>
     <p class="foot">Данные: Daggerheart SRD 1.0 в переводе ru.daggerheart.su. This product includes materials from the Daggerheart System Reference Document 1.0, © Critical Role, LLC, under the terms of the Darrington Press Community Gaming (DPCGL) License. Неофициальный фанатский инструмент. Иконки: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a>, CC BY 3.0, авторы: ${(window.DH_ICON_AUTHORS || []).map(esc).join(', ')}. Оригинальный арт смотри по ссылкам «На сайте».</p></div>`;
+}
+let REF_INDEX = null;
+function refIndex() {
+  if (REF_INDEX) return REF_INDEX;
+  const R = [];
+  const add = (type, kind, title, en, short, full, icon, link) => R.push({ type, kind, title, en: en || '', short, full, icon: icon || '', link, body: strip(full || short).toLowerCase() });
+  for (const [id, r] of Object.entries(D.rules)) add('rule', 'Правило', r.t, '', r.d, r.full && strip(r.full).length > strip(r.d).length + 20 ? r.full : '', '', '/rule/' + id);
+  for (const c of D.cards) add('card', `Карта · ${D.domains[c.domain]} · ур. ${c.level} · ${c.type}`, c.name, '', c.text, '', dmIcon(c.domain), '/domain-card/' + c.id);
+  for (const w of D.weapons) add('weapon', `${w.slot === 'primary' ? 'Основное' : 'Вспомогательное'} оружие · ранг ${w.tier}`, w.name, w.en, `<p>${TN[w.trait] || 'Заклинатель'} · ${w.range} · ${w.die}${w.bonus ? '+' + w.bonus : ''} ${w.magic ? 'маг.' : 'физ.'} · ${w.burden}</p>` + w.features.map((f) => `<p>${f.name ? '<b>' + esc(f.name) + ':</b> ' : ''}${f.text}</p>`).join(''), '', wIcon(w), '/equipment/' + w.id);
+  for (const a of D.armor) add('armor', `Броня · ранг ${a.tier}`, a.name, a.en, `<p>Пороги ${a.major}/${a.severe} · Броня ${a.score}</p>` + a.features.map((f) => `<p><b>${esc(f.name)}:</b> ${f.text}</p>`).join(''), '', aIcon(a), '/equipment/' + a.id);
+  for (const i of D.items) add('item', i.kind === 'consumable' ? 'Расходник' : 'Предмет', i.name, i.en, i.text, '', iIcon(i), '/equipment/' + i.id);
+  for (const a of D.ancestries) add('anc', 'Родословная', a.name, '', a.prelude, a.features.map((f) => `<p><b>${esc(f.name)}:</b> ${f.text}</p>`).join(''), ico('anc-' + a.id, 'bone', 'sm'), '/ancestry/' + a.id);
+  for (const a of D.communities) add('com', 'Сообщество', a.name, '', a.prelude, a.features.map((f) => `<p><b>${esc(f.name)}:</b> ${f.text}</p>`).join(''), ico('com-' + a.id, 'sage', 'sm'), '/community/' + a.id);
+  for (const b of D.beastforms) add('beast', `Звериная форма · ранг ${b.tier}`, b.name, '', b.html, '', '', '/beastform/' + b.id);
+  return (REF_INDEX = R);
+}
+/** Ранг совпадения: 0 — название начинается с запроса, 1 — какое-то слово названия, 2 — внутри слова, 3 — в тексте. -1 — нет. */
+function refScore(e, q) {
+  const t = e.title.toLowerCase(), en = e.en.toLowerCase();
+  if (t.startsWith(q) || en.startsWith(q)) return 0;
+  const words = (t + ' ' + en).split(/[\s\-—«»"(),.:]+/);
+  if (words.some((w) => w.startsWith(q))) return 1;
+  if (q.length >= 3 && (t.includes(q) || en.includes(q))) return 2;
+  if (q.length >= 3 && e.body.split(/[\s\-—«»"(),.:]+/).some((w) => w.startsWith(q))) return 3;
+  return -1;
 }
 function refResults() {
   const q = refQuery.trim().toLowerCase();
   if (q.length < 2) return `<div class="empty">Введи хотя бы две буквы. Подсказки по терминам также открываются кликом по подчёркнутым словам на любой странице.</div>`;
-  const hit = (...s) => s.some((v) => String(v || '').toLowerCase().includes(q));
-  const res = [];
-  for (const [id, r] of Object.entries(D.rules)) if (hit(r.t)) res.push(['Правило', r.t, r.full || r.d]);
-  for (const c of D.cards) if (hit(c.name)) res.push([`Карта · ${D.domains[c.domain]} · ур. ${c.level}`, c.name, c.text + `<p>${site('/domain-card/' + c.id)}</p>`, dmIcon(c.domain)]);
-  for (const w of D.weapons) if (hit(w.name, w.en)) res.push([`Оружие · ранг ${w.tier}`, w.name, `<p>${TN[w.trait] || 'Заклинатель'} · ${w.range} · ${w.die}${w.bonus ? '+' + w.bonus : ''} ${w.magic ? 'маг.' : 'физ.'} · ${w.burden}</p>` + w.features.map((f) => `<p>${f.name ? '<b>' + esc(f.name) + ':</b> ' : ''}${f.text}</p>`).join('')]);
-  for (const a of D.armor) if (hit(a.name, a.en)) res.push([`Броня · ранг ${a.tier}`, a.name, `<p>Пороги ${a.major}/${a.severe} · Броня ${a.score}</p>` + a.features.map((f) => `<p><b>${esc(f.name)}:</b> ${f.text}</p>`).join('')]);
-  for (const i of D.items) if (hit(i.name, i.en)) res.push([i.kind === 'consumable' ? 'Расходник' : 'Предмет', i.name, i.text]);
-  for (const a of D.ancestries) if (hit(a.name)) res.push(['Родословная', a.name, a.features.map((f) => `<p><b>${esc(f.name)}:</b> ${f.text}</p>`).join('')]);
-  for (const a of D.communities) if (hit(a.name)) res.push(['Сообщество', a.name, a.features.map((f) => `<p><b>${esc(f.name)}:</b> ${f.text}</p>`).join('')]);
-  for (const b of D.beastforms) if (hit(b.name)) res.push([`Звериная форма · ранг ${b.tier}`, b.name, b.html]);
-  if (!res.length) return `<div class="empty">Ничего не нашлось по «${esc(refQuery)}».</div>`;
-  return `<div class="muted small">Найдено: ${res.length}${res.length > 80 ? ', показаны первые 80' : ''}</div><div class="ref-list">${res.slice(0, 80).map(([k, t, h, ic]) => `<div class="ref-item"><span class="lbl">${esc(k)}</span><span class="row" style="gap:8px">${ic || ''}<b>${esc(t)}</b></span><div class="rich small">${h}</div></div>`).join('')}</div>`;
+  const hits = refIndex().filter((e) => refType === 'all' || e.type === refType).map((e) => [refScore(e, q), e]).filter(([sc]) => sc >= 0)
+    .sort((a, b) => a[0] - b[0] || a[1].title.localeCompare(b[1].title, 'ru'));
+  if (!hits.length) return `<div class="empty">Ничего не нашлось по «${esc(refQuery)}»${refType !== 'all' ? ' в этом разделе' : ''}.</div>`;
+  const inText = hits.filter(([sc]) => sc === 3).length;
+  const card = ([sc, e]) => `<article class="ref-item"><span class="lbl">${esc(e.kind)}</span><span class="row" style="gap:8px;flex-wrap:nowrap">${e.icon}<b>${esc(e.title)}</b></span>
+    <div class="rich small">${e.short}</div>${e.full ? `<details class="ref-more"><summary>Подробнее</summary><div class="rich small">${e.full}</div></details>` : ''}
+    <div class="row small">${sc === 3 ? '<span class="chip">найдено в тексте</span>' : ''}${site(e.link)}</div></article>`;
+  return `<div class="muted small">Найдено: ${hits.length}${inText ? `, из них ${inText} по тексту` : ''}${hits.length > 80 ? '. Показаны первые 80, уточни запрос' : ''}</div><div class="ref-list">${hits.slice(0, 80).map(card).join('')}</div>`;
 }
 
 /* ---------- сохранение ---------- */
@@ -853,6 +876,7 @@ document.addEventListener('click', (e) => {
   const b = t.closest('button'); if (!b) return;
   const x = derive();
   if (b.dataset.gear) { C.view = 'build'; C.step = STEPS.findIndex((q) => q.id === 'gear'); save(); render(); window.scrollTo(0, 0); return; }
+  if (b.dataset.reftype) { refType = b.dataset.reftype; document.querySelectorAll('[data-reftype]').forEach((q) => { q.classList.toggle('sel', q.dataset.reftype === refType); q.setAttribute('aria-pressed', String(q.dataset.reftype === refType)); }); $('#ref-res').innerHTML = refResults(); return; }
   if (b.dataset.view) { C.view = b.dataset.view; save(); render(); window.scrollTo(0, 0); return; }
   if (b.dataset.step != null || b.dataset.go != null) { C.step = Math.max(0, Math.min(STEPS.length - 1, num(b.dataset.step ?? b.dataset.go))); save(); render(); window.scrollTo(0, 0); return; }
   if (b.dataset.pick) {
