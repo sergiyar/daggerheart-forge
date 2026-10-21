@@ -225,6 +225,7 @@ function derive() {
     const mods = equipMods.filter((m) => m.key === k);
     if (LV.traits[k]) mods.push({ key: k, v: LV.traits[k], src: 'повышения уровня' });
     if (bst && bst.trait === k) mods.push({ key: k, v: bst.traitBonus, src: 'Звериная форма' });
+    if (C.play.fx?.tr?.[k]) mods.push({ key: k, v: C.play.fx.tr[k], src: 'зелье до отдыха' });
     if (beast && C.play.evolveTrait === k) mods.push({ key: k, v: 1, src: 'Эволюция' });
     traits[k] = { base, mods, total: base == null ? null : base + mods.reduce((s, m) => s + m.v, 0) };
   }
@@ -468,7 +469,9 @@ function stepGear(x) {
   const f = C.filters;
   const best = TR.map((t) => t[0]).filter((k) => C.traits[k] != null).sort((a, b) => C.traits[b] - C.traits[a]);
   const topVal = best.length ? C.traits[best[0]] : null;
-  const prim = D.weapons.filter((w) => w.tier === 1 && w.slot === 'primary' && (C.wheelchair ? w.wheelchair : !w.wheelchair));
+  const maxT = x.tier, gt = f.gTier && num(f.gTier) <= maxT ? num(f.gTier) : 0;
+  const tierOk = (it) => it.tier <= maxT && (!gt || it.tier === gt);
+  const prim = D.weapons.filter((w) => tierOk(w) && w.slot === 'primary' && (C.wheelchair ? w.wheelchair : !w.wheelchair)).sort((a, b) => b.tier - a.tier);
   const trFilter = (w) => {
     const tk = SPELL_TRAIT(w.trait, x);
     if (f.wTrait === 'all') return true;
@@ -481,28 +484,30 @@ function stepGear(x) {
     const warn = w.magic && !x.spellKey;
     const atk = modsOf(w.features).filter((m) => m.key === 'attack').reduce((s, m) => s + m.v, 0);
     return `<button class="opt" data-pick="${field}" data-val="${w.id}" aria-pressed="${C[field] === w.id}"><span class="radio"></span><span class="stack" style="gap:4px">
-      <span class="spread"><span class="row" style="gap:8px">${wIcon(w)}<b>${esc(w.name)}</b></span><span class="chips">${w.magic ? `<span class="chip ${warn ? 'warn' : 'accent'}">магическое</span>` : '<span class="chip">физическое</span>'}<span class="chip">${esc(w.burden)}</span></span></span>
+      <span class="spread"><span class="row" style="gap:8px">${wIcon(w)}<b>${esc(w.name)}</b></span><span class="chips">${w.magic ? `<span class="chip ${warn ? 'warn' : 'accent'}">магическое</span>` : '<span class="chip">физическое</span>'}<span class="chip">${esc(w.burden)}</span>${maxT > 1 ? `<span class="chip">ранг ${w.tier}</span>` : ''}</span></span>
       <span class="stats"><span>Характеристика <b>${w.trait === 'spell' ? 'Заклинателя' : esc(TN[w.trait] || w.trait)}${tv != null ? ' (' + sign(tv) + ')' : ''}</b></span><span>Дистанция <b>${esc(w.range)}</b></span><span>Урон <b>${x.prof}${esc(w.die)}${w.bonus ? '+' + w.bonus : ''}</b></span>${atk ? `<span>Атака <b>${sign(atk)}</b></span>` : ''}</span>
       ${w.features.map((ft) => `<span class="small">${ft.name ? `<b>${esc(ft.name)}:</b> ` : ''}${ft.text}</span>`).join('')}
       ${warn ? '<span class="small" style="color:var(--danger)">Магическим оружием по правилам пользуются персонажи с Характеристикой Заклинателя. У твоего подкласса её нет, уточни у Мастера.</span>' : ''}
     </span></button>`;
   };
   const twoH = x.pw && x.pw.burden.startsWith('Двуруч');
-  const secs = D.weapons.filter((w) => w.tier === 1 && w.slot === 'secondary');
-  const arms = D.armor.filter((a) => a.tier === 1);
+  const secs = D.weapons.filter((w) => tierOk(w) && w.slot === 'secondary').sort((a, b) => b.tier - a.tier);
+  const arms = D.armor.filter(tierOk).sort((a, b) => b.tier - a.tier);
   const traitOpts = `<option value="best" ${f.wTrait === 'best' ? 'selected' : ''}>под мои лучшие характеристики</option><option value="all" ${f.wTrait === 'all' ? 'selected' : ''}>всё оружие</option>` + TR.map(([k, n]) => `<option value="${k}" ${f.wTrait === k ? 'selected' : ''}>${n}</option>`).join('');
   const L = x.L;
   const armRow = (a) => {
     const mods = modsOf(a.features);
     const ev = x.cls ? x.cls.evasion + (x.has('Ловкий') ? 1 : 0) + mods.filter((m) => m.key === 'eva').reduce((s, m) => s + m.v, 0) : null;
     return `<button class="opt" data-pick="armor" data-val="${a.id}" aria-pressed="${C.armor === a.id}"><span class="radio"></span><span class="stack" style="gap:4px">
-      <span class="row" style="gap:8px">${aIcon(a)}<b>${esc(a.name)}</b></span>
+      <span class="row" style="gap:8px">${aIcon(a)}<b>${esc(a.name)}</b>${maxT > 1 ? `<span class="chip">ранг ${a.tier}</span>` : ''}</span>
       <span class="stats"><span>Пороги <b>${a.major + L} / ${a.severe + L}</b></span><span>Броня <b>${a.score}</b></span>${ev != null ? `<span>Уклонение станет <b>${ev}</b></span>` : ''}</span>
       ${a.features.map((ft) => `<span class="small"><b>${esc(ft.name)}:</b> ${ft.text}</span>`).join('')}
       <span class="small muted">Удар до ${a.major + L - 1} снимет 1 Рану, ${a.major + L}–${a.severe + L - 1} две, от ${a.severe + L} три.</span></span></button>`;
   };
   const items = x.cls?.items || [];
-  return `<h2>Основное оружие</h2>
+  const tierBar = maxT > 1 ? `<div class="note">Ты на ${x.L} уровне (ранг ${maxT}): можно носить снаряжение ${maxT === 1 ? '1 ранга' : `рангов 1–${maxT}`}. Снаряжение выше 1 ранга обычно находят или покупают в игре, так что бери то, что у тебя реально есть. Ранг снаряжения выше твоего надеть нельзя.
+      <div class="row small" style="margin-top:6px">Показать ранг <select id="gTier" data-filter="gTier"><option value="0">все доступные</option>${Array.from({ length: maxT }, (_, i) => `<option value="${i + 1}" ${gt === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('')}</select></div></div>` : '';
+  return `${tierBar}<h2>Основное оружие</h2>
     <div class="filters"><label class="row small">Показать <select id="wTrait" data-filter="wTrait">${traitOpts}</select></label>
       <label class="row small"><input type="checkbox" data-toggle="wheelchair" ${C.wheelchair ? 'checked' : ''}> боевая коляска вместо оружия</label></div>
     <div class="optlist">${prim.filter(trFilter).map((w) => wRow(w, 'primary')).join('') || '<div class="empty">Под этот фильтр ничего нет.</div>'}</div>
@@ -611,7 +616,7 @@ function renderSheet() {
   const addable = D.cards.filter((c) => x.cls.domains.includes(c.domain) && c.level <= x.L && !C.cards.includes(c.id) && !C.vault.includes(c.id));
   const feats = allActiveFeats(x).filter((a) => a.src !== 'card').map((a) => feat(a.f, a.label) + featUseHTML(a.f, a.src)).join('');
   const startInv = ['Факел', 'Верёвка (15 м)', 'Базовые припасы', ITEM[C.potion]?.name, C.classItem].filter(Boolean);
-  const extra = P.extra.map((e, i) => { const it = ITEM[e.id]; return it ? `<div class="spread small"><span class="row" style="gap:6px;flex-wrap:nowrap">${iIcon(it)}<span><b>${esc(it.name)}</b> <span class="rich muted">${strip(it.text).slice(0, 120)}</span></span></span><span class="row"><input type="number" min="0" data-extra="${i}" value="${num(e.n)}" style="width:64px" aria-label="Количество"><button class="ghost danger" data-dropitem="${i}">✕</button></span></div>` : ''; }).join('');
+  const extra = P.extra.map((e, i) => { const it = ITEM[e.id]; return it ? `<div class="spread small"><span class="row" style="gap:6px;flex-wrap:nowrap">${iIcon(it)}<span><b>${esc(it.name)}</b> <span class="rich muted">${strip(it.text).slice(0, 120)}</span></span></span><span class="row">${it.kind === 'consumable' ? `<button class="small" data-consume="${i}">Использовать</button>` : ''}<input type="number" min="0" max="${it.kind === 'consumable' ? 5 : 99}" data-extra="${i}" value="${num(e.n)}" style="width:64px" aria-label="Количество"><button class="ghost danger" data-dropitem="${i}">✕</button></span></div>` : ''; }).join('');
   const bfs = x.cls.id === 'druid' ? D.beastforms.filter((b) => b.tier <= tierOf(x.L)) : [];
   return `<div class="sheet">
   <div class="stack">
@@ -621,6 +626,7 @@ function renderSheet() {
     <section class="panel"><h2>Характеристики <span class="lbl">клик — бросок</span></h2><div class="traits6">${traits}</div></section>
     <section class="panel"><h2>Защита</h2>
       <div class="defs"><div><span class="lbl">${term('evasion', 'Уклонение')}</span><b>${x.eva.total}</b></div><div><span class="lbl">${term('armor-score', 'Показатель Брони')}</span><b>${x.ar.total}</b></div><div><span class="lbl">${term('hope', 'Надежда')}</span><b>${P.hope}</b></div></div>
+      ${x.evaCond.length ? `<div class="small"><span class="lbl">Уклонение в особых случаях</span>${x.evaCond.map((t) => `<div>· ${esc(t)}</div>`).join('')}</div>` : ''}
       <div class="thresh"><div><b>1</b><span class="small muted">${term('minor-damage', 'Лёгкий')}</span></div><div class="cut">${x.thr.maj}<span>ощутимый</span></div><div><b>2</b><span class="small muted">${term('major-damage', 'Ощутимый')}</span></div><div class="cut">${x.thr.sev}<span>тяжёлый</span></div><div><b>3</b><span class="small muted">${term('severe-damage', 'Тяжёлый')}</span></div></div>
       <details><summary>Откуда эти цифры</summary><div class="small"><div><b>Уклонение:</b> ${breakdown(x.eva)}</div><div><b>Раны:</b> ${breakdown(x.hp)}</div><div><b>Стресс:</b> ${breakdown(x.stress)}</div><div><b>Броня:</b> ${breakdown(x.ar) || '—'}</div><div><b>Пороги:</b> ${breakdown(x.thr)}</div></div></details>
     </section>
@@ -632,7 +638,8 @@ function renderSheet() {
     <section class="panel"><h2>Золото и вещи</h2>
       <div class="gold"><label><span class="lbl">Горсти</span><input type="number" min="0" id="g-h" data-bind="play.gold.h" data-num="1" value="${P.gold.h}"></label><label><span class="lbl">Мешки</span><input type="number" min="0" id="g-b" data-bind="play.gold.b" data-num="1" value="${P.gold.b}"></label><label><span class="lbl">Сундуки</span><input type="number" min="0" id="g-c" data-bind="play.gold.c" data-num="1" value="${P.gold.c}"></label></div>
       <div class="small muted">10 горстей = мешок, 10 мешков = сундук.</div>
-      <div class="small"><b>С собой:</b> ${startInv.map(esc).join(' · ')}</div>
+      <div class="small"><b>С собой:</b> ${startInv.filter((n) => n !== ITEM[C.potion]?.name || !P.startPotionUsed).map(esc).join(' · ')}</div>
+      ${ITEM[C.potion] && !P.startPotionUsed ? `<div class="row small">${iIcon(ITEM[C.potion])}<span>${esc(ITEM[C.potion].name)}</span><button class="small" data-act="start-potion">Использовать</button></div>` : ''}
       <div class="stack" style="gap:6px">${extra}</div>
       <div class="row"><select id="add-item" aria-label="Добавить предмет"><option value="">Добавить предмет или расходник…</option>${D.items.slice().sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((i) => `<option value="${i.id}">${esc(i.name)}${i.kind === 'consumable' ? ' (расходник)' : ''}</option>`).join('')}</select><button data-act="add-item">Добавить</button></div>
       <textarea id="inv" data-bind="play.inv" placeholder="Прочие вещи и заметки по инвентарю">${esc(P.inv)}</textarea></section>
@@ -640,7 +647,7 @@ function renderSheet() {
   </div>
   <div class="stack">
     ${rollerHTML(x)}
-    <section class="panel"><h2>Оружие</h2>${weapons || '<div class="empty">Оружие не выбрано.</div>'}${isWarrior(x) ? '<div class="small muted">Боевая Подготовка воина уже добавлена к физическому урону.</div>' : ''}</section>
+    <section class="panel"><h2 class="spread">Оружие<button class="small" data-gear="1">Сменить снаряжение</button></h2>${weapons || '<div class="empty">Оружие не выбрано.</div>'}${isWarrior(x) ? '<div class="small muted">Боевая Подготовка воина уже добавлена к физическому урону.</div>' : ''}</section>
     <section class="panel"><h2>${term('experience', 'Опыт')}</h2>${x.exps.filter((e) => e.name).map((e) => `<div class="spread"><span>${esc(e.name)}${e.fromLevel ? ' <span class="small muted">(с повышения)</span>' : ''}</span><span class="chip accent mono">${sign(e.mod)}</span></div>`).join('') || '<div class="muted">Опыт не заполнен.</div>'}</section>
     <section class="panel"><h2>Карты домена</h2><div class="small muted">${term('loadout-and-vault', 'Рука')}: ${handCards.length} из 5.</div>
       ${handCards.map((c) => dcard(c, true)).join('') || '<div class="muted">В Руке пусто.</div>'}
@@ -693,7 +700,7 @@ function refResults() {
   if (q.length < 2) return `<div class="empty">Введи хотя бы две буквы. Подсказки по терминам также открываются кликом по подчёркнутым словам на любой странице.</div>`;
   const hit = (...s) => s.some((v) => String(v || '').toLowerCase().includes(q));
   const res = [];
-  for (const [id, r] of Object.entries(D.rules)) if (hit(r.t)) res.push(['Правило', r.t, r.d]);
+  for (const [id, r] of Object.entries(D.rules)) if (hit(r.t)) res.push(['Правило', r.t, r.full || r.d]);
   for (const c of D.cards) if (hit(c.name)) res.push([`Карта · ${D.domains[c.domain]} · ур. ${c.level}`, c.name, c.text + `<p>${site('/domain-card/' + c.id)}</p>`, dmIcon(c.domain)]);
   for (const w of D.weapons) if (hit(w.name, w.en)) res.push([`Оружие · ранг ${w.tier}`, w.name, `<p>${TN[w.trait] || 'Заклинатель'} · ${w.range} · ${w.die}${w.bonus ? '+' + w.bonus : ''} ${w.magic ? 'маг.' : 'физ.'} · ${w.burden}</p>` + w.features.map((f) => `<p>${f.name ? '<b>' + esc(f.name) + ':</b> ' : ''}${f.text}</p>`).join('')]);
   for (const a of D.armor) if (hit(a.name, a.en)) res.push([`Броня · ранг ${a.tier}`, a.name, `<p>Пороги ${a.major}/${a.severe} · Броня ${a.score}</p>` + a.features.map((f) => `<p><b>${esc(f.name)}:</b> ${f.text}</p>`).join('')]);
@@ -782,7 +789,9 @@ function refreshTrackers() { const y = window.scrollY; render(); window.scrollTo
 const pop = $('#pop');
 function showPop(el) {
   const id = el.dataset.rule, r = D.rules[id] || { t: el.textContent.trim(), d: '<p class="muted">Короткого описания нет в базе, полное правило есть на сайте.</p>' };
-  pop.innerHTML = `<div class="spread"><h4>${esc(r.t)}</h4><button class="ghost" data-act="pop-close" aria-label="Закрыть">✕</button></div><div class="rich">${r.d}</div><div>${site('/rule/' + id, 'Правило на сайте')}</div>`;
+  const full = r.full && strip(r.full).length > strip(r.d).length + 20;
+  pop.innerHTML = `<div class="spread"><h4>${esc(r.t)}</h4><button class="ghost" data-act="pop-close" aria-label="Закрыть">✕</button></div><div class="rich">${r.d}</div>
+    ${full ? `<details class="pop-more"><summary>Подробнее</summary><div class="rich">${r.full}</div></details>` : ''}<div>${site('/rule/' + id, 'Правило на сайте')}</div>`;
   pop.hidden = false;
   const b = el.getBoundingClientRect();
   const w = pop.offsetWidth, vw = document.documentElement.clientWidth;
@@ -843,6 +852,7 @@ document.addEventListener('click', (e) => {
   if (!t.closest('#pop')) hidePop();
   const b = t.closest('button'); if (!b) return;
   const x = derive();
+  if (b.dataset.gear) { C.view = 'build'; C.step = STEPS.findIndex((q) => q.id === 'gear'); save(); render(); window.scrollTo(0, 0); return; }
   if (b.dataset.view) { C.view = b.dataset.view; save(); render(); window.scrollTo(0, 0); return; }
   if (b.dataset.step != null || b.dataset.go != null) { C.step = Math.max(0, Math.min(STEPS.length - 1, num(b.dataset.step ?? b.dataset.go))); save(); render(); window.scrollTo(0, 0); return; }
   if (b.dataset.pick) {
@@ -896,7 +906,7 @@ document.addEventListener('click', (e) => {
   if (act === 'hp-1') { C.play.hp = Math.max(0, C.play.hp - 1); refreshTrackers(); }
   if (act === 'armor-clear') { C.play.armor = 0; refreshTrackers(); }
   if (act === 'hope+1') { C.play.hope = Math.min(derive().hopeMax, C.play.hope + 1); refreshTrackers(); }
-  if (act === 'add-item') { const id = $('#add-item').value; if (id) { const ex = C.play.extra.find((e2) => e2.id === id); if (ex) ex.n = num(ex.n) + 1; else C.play.extra.push({ id, n: 1 }); refreshTrackers(); } }
+  if (act === 'add-item') { const id = $('#add-item').value; if (id) { const ex = C.play.extra.find((e2) => e2.id === id); if (ex) { if (ITEM[id].kind === 'consumable' && num(ex.n) >= 5) { alertNote('Расходников одного вида можно нести не больше 5.'); return; } ex.n = num(ex.n) + 1; } else C.play.extra.push({ id, n: 1 }); refreshTrackers(); } }
   if (act === 'add-card') { const id = $('#add-card').value; if (id) { if (C.cards.length < 5) C.cards.push(id); else C.vault.push(id); refreshTrackers(); } }
   if (act === 'copy') {
     const ta = $('#s-text'); ta.value = JSON.stringify(C);

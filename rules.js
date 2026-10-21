@@ -17,7 +17,7 @@ function hitOptions(x) {
   if (x.inHand('i-am-your-shield')) o.push({ id: 'shield', kind: 'check', label: 'Заслоняю союзника («Я твой щит»): +1 Стресс, ячеек брони сколько угодно' });
   if (x.cls && x.cls.features.some((f) => f.name === 'Неудержимый')) o.push({ id: 'unstoppable', kind: 'auto', on: !!P.unstoppable, text: 'Неудержимый: физический урон −1 порог' });
   if (x.inHand('get-back-up')) o.push({ id: 'getBackUp', kind: 'check', label: '«Вернуться в строй»: Тяжёлый −1 порог за 1 Стресс' });
-  if (x.fx.swarm) o.push({ id: 'swarm', kind: 'check', label: 'Бронированные жуки: −1 порог (сгорают, если не потратить Надежду)', def: true });
+  if (x.fx.swarm) { o.push({ id: 'swarm', kind: 'check', label: 'Бронированные жуки: −1 порог', def: true }); o.push({ id: 'swarmKeep', kind: 'check', label: 'Сохранить жуков после удара (1 Надежда)' }); }
   if (x.has('Чешуя')) o.push({ id: 'scales', kind: 'check', label: 'Дракона, Чешуя: при Тяжёлом на 1 Рану меньше за 1 Стресс' });
   if (x.has('Толстая кожа')) o.push({ id: 'thickSkin', kind: 'check', label: 'Дварф, Толстая кожа: Лёгкий урон → 2 Стресса вместо Раны' });
   if (x.has('Повышенная стойкость')) o.push({ id: 'toughness', kind: 'check', label: 'Дварф, Повышенная стойкость: физический урон вдвое за 3 Надежды' });
@@ -46,7 +46,7 @@ function resolveHit(x, o) {
   const down = (n, why) => { if (sev <= 0) return; const b = sev; sev = Math.max(0, sev - n); steps.push(`${why}: ${SEV_NAME[b]} → ${SEV_NAME[sev]}`); };
   if (sev && phys && P.unstoppable) down(1, 'Неудержимый');
   if (initial >= 3 && o.getBackUp && x.inHand('get-back-up')) { cost.stress += 1; down(1, '«Вернуться в строй» (1 Стресс)'); }
-  if (sev && o.swarm && x.fx.swarm) down(1, 'Бронированные жуки');
+  if (sev && o.swarm && x.fx.swarm) { down(1, 'Бронированные жуки'); if (o.swarmKeep) { cost.hope += 1; steps.push('Жуки остаются (1 Надежда)'); } }
 
   /* ячейки брони */
   const free = Math.max(0, x.ar.total - num(P.armor));
@@ -87,14 +87,14 @@ function resolveHit(x, o) {
   const hpFree = x.hp.total - num(P.hp);
   if (hp > 0 && hp >= hpFree && x.armFeat('Непробиваемое') && !P.impenUsed) { hp -= 1; cost.stress += 1; impen = true; steps.push('Броня «Непробиваемое»: последняя Рана заменена Стрессом'); }
 
-  return { steps, hp: Math.max(0, hp), stress: cost.stress - overflow, hope: cost.hope, armor: marked, cap: blocked ? 0 : Math.min(cap, free), capWhy: why.join(', '), blocked, free, impen, sev, swarmUsed: !!(o.swarm && x.fx.swarm), dead: num(P.hp) + Math.max(0, hp) >= x.hp.total };
+  return { steps, hp: Math.max(0, hp), stress: cost.stress - overflow, hope: cost.hope, armor: marked, cap: blocked ? 0 : Math.min(cap, free), capWhy: why.join(', '), blocked, free, impen, sev, swarmUsed: !!(o.swarm && x.fx.swarm && !o.swarmKeep), dead: num(P.hp) + Math.max(0, hp) >= x.hp.total };
 }
 
 function readHitForm() {
   const g = (id) => document.getElementById(id);
   const v = (id) => (g(id) ? g(id).checked : false);
   return { dmg: g('hit-dmg')?.value ?? '', type: document.querySelector('input[name="hit-type"]:checked')?.value || 'phys', direct: v('hit-direct'), resist: v('hit-resist'), immune: v('hit-immune'),
-    slots: num(g('hit-slots')?.value), shield: v('hit-shield'), getBackUp: v('hit-getBackUp'), swarm: v('hit-swarm'), scales: v('hit-scales'), thickSkin: v('hit-thickSkin'), toughness: v('hit-toughness'), massive: !!C.play.massiveRule };
+    slots: num(g('hit-slots')?.value), shield: v('hit-shield'), getBackUp: v('hit-getBackUp'), swarm: v('hit-swarm'), swarmKeep: v('hit-swarmKeep'), scales: v('hit-scales'), thickSkin: v('hit-thickSkin'), toughness: v('hit-toughness'), massive: !!C.play.massiveRule };
 }
 
 function hitPanelHTML(x) {
@@ -236,17 +236,27 @@ const SELF_FX = {
   'Трансцендентность': { fx: 'transcend' },
   'Метка Следопыта': { special: 'mark' },
 };
+/* Карты с несколькими опциями: отдельные кнопки для эффектов, которые конструктор применяет сам */
+const CARD_ACTIONS = {
+  'Призыв роя': [{ label: 'Бронированные жуки на себя', stress: 1, fx: 'swarm', note: 'следующий удар −1 порог' }],
+  'Книга Авы': [{ label: 'Доспехи Тавы на себя', hope: 1, fx: 'tava', note: '+1 к Броне до отдыха' }],
+};
+function cardActionsHTML(f) {
+  const acts = CARD_ACTIONS[f.name]; if (!acts) return '';
+  return acts.map((a, i) => { const on = C.play.fx?.[a.fx]; return `<button class="small ${on ? 'primary' : ''}" data-cardfx="${esc(f.name)}|${i}" ${on ? 'disabled' : ''}>${esc(a.label)} (${a.hope ? HOP(a.hope) : STR(a.stress)})${on ? ': действует' : ''}</button><span class="small muted">${esc(a.note)}</span>`; }).join('');
+}
 function featUseHTML(f, srcKey) {
   const c = featCosts(f.text);
   const fx = SELF_FX[f.name];
-  if (!c.hope.length && !c.stress.length && !c.limit && !fx) return '';
+  const special = srcKey === 'card' ? cardActionsHTML(f) : '';
+  if (!c.hope.length && !c.stress.length && !c.limit && !fx) return special ? `<div class="row small use-row">${special}</div>` : '';
   const key = `${srcKey}|${f.name}`;
   const used = num((C.play.uses || {})[key]);
   const out = used >= c.times && c.limit;
   const btn = (kind, n) => `<button class="small" data-use="${esc(key)}" data-kind="${kind}" data-n="${n}" ${out ? 'disabled' : ''}>${kind === 'hope' ? `Потратить ${HOP(n)}` : kind === 'stress' ? `Отметить ${STR(n)}` : 'Использовать'}</button>`;
   const btns = [...c.hope.map((n) => btn('hope', n)), ...c.stress.map((n) => btn('stress', n))];
   if (!btns.length) btns.push(btn('free', 0));
-  return `<div class="row small use-row">${btns.join('')}${c.limit ? `<span class="chip ${out ? 'warn' : ''}">${LIMIT_NAME[c.limit]}${c.times > 1 ? ` ×${c.times}` : ''}${used ? `: использовано ${used}` : ''}</span>${used ? `<button class="ghost small" data-unuse="${esc(key)}">вернуть</button>` : ''}` : ''}</div>`;
+  return `<div class="row small use-row">${special}${btns.join('')}${c.limit ? `<span class="chip ${out ? 'warn' : ''}">${LIMIT_NAME[c.limit]}${c.times > 1 ? ` ×${c.times}` : ''}${used ? `: использовано ${used}` : ''}</span>${used ? `<button class="ghost small" data-unuse="${esc(key)}">вернуть</button>` : ''}` : ''}</div>`;
 }
 function featLimitOf(key) { const name = key.split('|').slice(1).join('|'); const all = allActiveFeats(derive()); const f = all.find((a) => `${a.src}|${a.f.name}` === key); return f ? featCosts(f.f.text) : { limit: null, times: 1 }; }
 function allActiveFeats(x) {
@@ -314,7 +324,7 @@ function restHTML(x) {
 }
 function endEffects(kind) { /* kind: rest | long */
   const P = C.play; P.fx = P.fx || {};
-  ['attack1', 'rogueDodge', 'element', 'earth', 'transcend', 'swarm', 'retract', 'tava'].forEach((k) => delete P.fx[k]);
+  ['attack1', 'rogueDodge', 'element', 'earth', 'transcend', 'swarm', 'retract', 'tava', 'tr'].forEach((k) => delete P.fx[k]);
   P.impenUsed = false; P.unstoppable = 0; /* сцена закончилась */
   P.uses = Object.fromEntries(Object.entries(P.uses || {}).filter(([k]) => { const c = featLimitOf(k); return !(c.limit === 'rest' || (kind === 'long' && c.limit === 'long')); }));
   if (kind === 'long' && P.companion) { if (num(P.companion.stress) >= companionStressMax()) P.companion.stress = companionStressMax() - 1; }
@@ -498,7 +508,9 @@ function duality(traitKey, label, extra = 0, opt = {}) {
   const ev = picks.reduce((s, e) => s + e.mod * (f.adept ? 2 : 1), 0);
   const atkBonus = f.attack && P.fx?.attack1 ? 1 : 0;
   const rallyRoll = f.rally && P.rally ? d(P.rally) : 0;
-  const total = h + fe + tv + ev + f.mod + extra + advRoll + (f.elem ? 2 : 0) + atkBonus + rallyRoll;
+  const potion = traitKey && P.fx?.nextRoll?.[traitKey] ? 1 : 0;
+  if (potion) delete P.fx.nextRoll[traitKey];
+  const total = h + fe + tv + ev + f.mod + extra + advRoll + (f.elem ? 2 : 0) + atkBonus + rallyRoll + potion;
   if (f.auto && !opt.reroll) { P.hope = num(P.hope) - hopeCost; if (stressCost) markStress(stressCost, x); if (f.tag) { P.uses = P.uses || {}; P.uses.tagteam = 1; } if (rallyRoll) P.rally = 0; }
   const crit = h === fe && hd === 12 || (hd === 20 && h === fe);
   const ok = crit ? true : f.dc == null ? null : total >= f.dc;
@@ -519,6 +531,7 @@ function duality(traitKey, label, extra = 0, opt = {}) {
   if (f.elem) parts.push('Элементалист +2');
   if (atkBonus) parts.push('Беспощадный +1');
   if (rallyRoll) parts.push(`Сплочение +${rallyRoll}`);
+  if (potion) parts.push('зелье +1');
   if (f.mod + extra) parts.push(`мод. ${sign(f.mod + extra)}`);
   if (f.tag) parts.push('Командный бросок');
   lastDual = { traitKey, label, extra, form: { ...f, picks: f.picks }, h, f: fe, total, ok, crit, withHope, attack: f.attack, react: f.react, picksUsed: picks.length, bonus: 0, hd, strangeDone: false, slayerDone: false, poetDone: false };
@@ -606,6 +619,7 @@ function rollDamage(id, crit, override) {
   if (ch('d-pair')) add(num(g('d-pair').dataset.v), 'вспомогательное оружие');
   if (x.hasSub('Адреналин') && P.cond?.vulnerable) add(x.L, 'Адреналин');
   if (P.unstoppable) add(P.unstoppable, 'Неудержимость');
+  if (!override && (P.fx?.nextDmg || []).length) { for (const ex of P.fx.nextDmg) { const r = rollExpr(ex); add(r.v, `${ex} (расходник)`); } P.fx.nextDmg = []; }
   let extraMag = '';
   if (P.lastAttackFear && x.hasSub('Победи свой страх')) { const r = d(10); extraMag = ` + ${r} магического (Победи свой страх)`; P.lastAttackFear = false; }
   P.hope = num(P.hope) - hope; if (stress) markStress(stress, x);
@@ -687,6 +701,12 @@ document.addEventListener('click', (e) => {
   const x = () => derive();
   const mechErr = (t) => { const el = document.getElementById('mech-err'); if (el) el.textContent = t; };
   if (b.dataset.use) return useFeature(b.dataset.use, b.dataset.kind, num(b.dataset.n));
+  if (b.dataset.cardfx) {
+    const [nm, i] = b.dataset.cardfx.split('|'), a = CARD_ACTIONS[nm][+i], xx = derive();
+    if (a.hope && num(P.hope) < a.hope) { alertNote(`Не хватает Надежды: нужно ${a.hope}.`); return; }
+    if (a.hope) P.hope -= a.hope; let over = 0; if (a.stress) over = markStress(a.stress, xx);
+    P.fx[a.fx] = true; addLog(`${esc(nm)}: ${esc(a.label)}${over ? `, +${RAN(over)} (Стресс переполнен)` : ''}`); return refreshTrackers();
+  }
   if (b.dataset.unuse) { P.uses[b.dataset.unuse] = Math.max(0, num(P.uses[b.dataset.unuse]) - 1); return refreshTrackers(); }
   if (b.dataset.cond) { P.cond[b.dataset.cond] = !P.cond[b.dataset.cond]; return refreshTrackers(); }
   if (b.dataset.post) return postRoll(b.dataset.post);
@@ -747,3 +767,31 @@ document.addEventListener('input', (e) => {
   if (el.closest('#rest-panel') && restState) { const i = el.dataset.rest ?? el.dataset.restAlly; if (el.dataset.rest != null) restState.moves[+i] = el.value; if (el.dataset.restAlly != null) restState.ally[+i] = el.checked; }
 });
 document.addEventListener('change', (e) => { const el = e.target; if (el.closest('#rest-panel') && restState) { if (el.dataset.rest != null) restState.moves[+el.dataset.rest] = el.value; if (el.dataset.restAlly != null) restState.ally[+el.dataset.restAlly] = el.checked; } });
+
+
+/* ================= РАСХОДНИКИ ================= */
+const TRAIT_DAT = { 'Проворност': 'agi', 'Сил': 'str', 'Искусност': 'fin', 'Инстинкт': 'ins', 'Влияни': 'pre', 'Знани': 'kno' };
+function traitFromWord(w) { for (const [k, v] of Object.entries(TRAIT_DAT)) if (w.startsWith(k)) return v; return null; }
+function rollExpr(e) { const m = String(e).match(/(\d*)d(\d+)(?:\s*\+\s*(\d+))?/); if (!m) return { v: num(e), txt: String(e) }; const n = num(m[1] || 1), r = Array.from({ length: n }, () => d(+m[2])); const v = r.reduce((a, b) => a + b, 0) + num(m[3]); return { v, txt: `${e} [${r.join(',')}${m[3] ? '+' + m[3] : ''}] = ${v}` }; }
+function consumeItem(it) {
+  const x = derive(), P = C.play; P.fx = P.fx || {};
+  const t = strip(it.text).replace(/\s+/g, ' ');
+  let m, res = [];
+  if (it.id === 'feast-of-xuria') { P.hp = 0; P.stress = 0; const r = rollExpr('1d4'); gainHope(r.v); res.push(`все Раны и Стресс сняты, +${r.v} Надежды`); }
+  else if ((m = t.match(/(?:Излечите|исцелить)\s+(\d*d\d+(?:\s*\+\s*\d+)?|\d+)\s+Ран/i))) { const r = rollExpr(m[1]); P.hp = Math.max(0, num(P.hp) - r.v); res.push(`Раны −${r.v} (${r.txt})`); }
+  else if ((m = t.match(/Очистите\s+(\d*d\d+(?:\s*\+\s*\d+)?|\d+)\s+Стресс/i))) { const r = rollExpr(m[1]); P.stress = Math.max(0, num(P.stress) - r.v); res.push(`Стресс −${r.v} (${r.txt})`); }
+  else if ((m = t.match(/\+1 к (\S+) до следующего отдыха/))) { const k = traitFromWord(m[1]); if (k) { P.fx.tr = P.fx.tr || {}; P.fx.tr[k] = num(P.fx.tr[k]) + 1; res.push(`${TN[k]} +1 до отдыха`); } }
+  else if ((m = t.match(/\+1 к следующему броску (\S+)/))) { const k = traitFromWord(m[1]); if (k) { P.fx.nextRoll = P.fx.nextRoll || {}; P.fx.nextRoll[k] = 1; res.push(`+1 к следующему броску: ${TN[k]}`); } }
+  else if ((m = t.match(/добавить (\d*d\d+) к вашему следующему броску урона/))) { P.fx.nextDmg = [...(P.fx.nextDmg || []), m[1]]; res.push(`+${m[1]} к следующему урону`); }
+  else if ((m = t.match(/получить (\d+) Надежд/))) { gainHope(+m[1]); res.push(`+${m[1]} Надежды`); }
+  else res.push('эффект смотри в описании');
+  addLog(`${esc(it.name)}: ${esc(res.join(', '))}`);
+  return res.join(', ');
+}
+function useStartPotion() { const it = ITEM[C.potion]; if (!it || C.play.startPotionUsed) return; C.play.startPotionUsed = true; consumeItem(it); refreshTrackers(); }
+function useExtra(i) { const e = C.play.extra[i]; const it = e && ITEM[e.id]; if (!it || num(e.n) < 1) return; e.n = num(e.n) - 1; consumeItem(it); if (e.n <= 0) C.play.extra.splice(i, 1); refreshTrackers(); }
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.consume != null) return useExtra(+b.dataset.consume);
+  if (b.dataset.act === 'start-potion') return useStartPotion();
+});

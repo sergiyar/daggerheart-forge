@@ -193,7 +193,11 @@ details > div{padding:0 12px 12px;display:grid;gap:8px}
 .roll{font-family:var(--f-mono);font-weight:500}
 #pop{position:absolute;z-index:20;max-width:min(360px,calc(100vw - 32px));background:var(--raised);border:1px solid var(--accent);border-radius:10px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.18);display:grid;gap:6px;font-size:.92rem}
 #pop h4{color:var(--accent)}
-#pop .rich{max-height:min(50vh,360px);overflow:auto}
+#pop > .rich{max-height:min(30vh,220px);overflow:auto}
+#pop .pop-more{border:0;background:transparent}
+#pop .pop-more > summary{padding:4px 0;color:var(--accent)}
+#pop .pop-more > .rich{max-height:min(45vh,380px);overflow:auto;padding:0 2px}
+#pop{max-width:min(460px,calc(100vw - 32px))}
 .opt.sub{grid-template-columns:auto 1fr;cursor:default}
 .opt.sub.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
 .pickbtn{border:0;background:transparent;padding:2px}
