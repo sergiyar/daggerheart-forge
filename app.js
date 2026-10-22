@@ -607,7 +607,7 @@ function renderSheet() {
   const weapons = [x.pw, x.sw].filter(Boolean).map((w, i) => {
     const tk = SPELL_TRAIT(w.trait, x);
     const atk = modsOf(w.features).filter((m) => m.key === 'attack').reduce((s, m) => s + m.v, 0);
-    return `<div class="wcard"><div class="spread"><span class="row" style="gap:8px">${wIcon(w)}<b>${esc(w.name)}</b></span><span class="row"><button data-atk="${w.id}">Атака</button><button data-dmg="${w.id}">Урон</button><button data-dmg="${w.id}" data-crit="1">Крит</button></span></div>
+    return `<div class="wcard"><div class="spread"><span class="row" style="gap:8px">${wIcon(w)}<b>${esc(w.name)}</b></span><span class="row"><button data-atk="${w.id}" ${x.beast ? 'disabled' : ''}>Атака</button><button data-dmg="${w.id}" ${x.beast ? 'disabled' : ''}>Урон</button><button data-dmg="${w.id}" data-crit="1" ${x.beast ? 'disabled' : ''}>Крит</button></span></div>
       <div class="small muted">${i === 0 ? 'Основное' : 'Вспомогательное'} · ${tk ? TN[tk] + ' ' + sign(x.traits[tk].total ?? 0) : 'Заклинатель'}${atk ? ' · атака ' + sign(atk) : ''} · ${esc(w.range)} · ${x.prof}${esc(w.die)}${w.bonus ? '+' + w.bonus : ''}${isWarrior(x) && !w.magic ? '+' + x.L : ''} ${w.magic ? 'маг.' : 'физ.'} · ${esc(w.burden)}</div>
       ${w.features.map((f) => `<div class="small">${f.name ? `<b>${esc(f.name)}:</b> ` : ''}${f.text}</div>`).join('')}</div>`;
   }).join('');
@@ -648,7 +648,7 @@ function renderSheet() {
   </div>
   <div class="stack">
     ${rollerHTML(x)}
-    <section class="panel"><h2 class="spread">Оружие<button class="small" data-gear="1">Сменить снаряжение</button></h2>${weapons || '<div class="empty">Оружие не выбрано.</div>'}${invWeaponsHTML(x)}${isWarrior(x) ? '<div class="small muted">Боевая Подготовка воина уже добавлена к физическому урону.</div>' : ''}</section>
+    <section class="panel"><h2 class="spread">Оружие<button class="small" data-gear="1">Сменить снаряжение</button></h2>${weapons || '<div class="empty">Оружие не выбрано.</div>'}${x.beast ? `<div class="note">Ты в звериной форме («${esc(x.beast.name)}»): атакуй формой в блоке «Механики класса».</div>` : ''}${invWeaponsHTML(x)}${isWarrior(x) ? '<div class="small muted">Боевая Подготовка воина уже добавлена к физическому урону.</div>' : ''}</section>
     <section class="panel"><h2>${term('experience', 'Опыт')}</h2>${x.exps.filter((e) => e.name).map((e) => `<div class="spread"><span>${esc(e.name)}${e.fromLevel ? ' <span class="small muted">(с повышения)</span>' : ''}</span><span class="chip accent mono">${sign(e.mod)}</span></div>`).join('') || '<div class="muted">Опыт не заполнен.</div>'}</section>
     <section class="panel"><h2>Карты домена</h2><div class="small muted">${term('loadout-and-vault', 'Рука')}: ${handCards.length} из 5.</div>
       ${handCards.map((c) => dcard(c, true)).join('') || '<div class="muted">В Руке пусто.</div>'}

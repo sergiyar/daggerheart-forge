@@ -141,6 +141,8 @@ function applyHit() {
   P.armor = num(P.armor) + r.armor;
   if (r.impen) P.impenUsed = true;
   if (r.swarmUsed) { P.fx.swarm = false; }
+  const xb = derive();
+  if (P.beast && ((xb.bst?.fragile && r.sev >= 2) || num(P.hp) >= xb.hp.total)) { addLog(`Звериная форма закончилась: ${num(P.hp) >= xb.hp.total ? 'отмечена последняя Рана' : 'Хрупкость, урон Ощутимый или больше'}`); P.beast = ''; P.evolveTrait = ''; }
   if (r.sev >= 3 && P.fx.earth) { P.fx.earth = false; r.steps.push('Тяжёлый урон: Стихийное воплощение закончилось'); }
   addLog(`Удар ${num(f.dmg)}: <b>${RAN(r.hp)}</b>${r.stress ? `, ${STR(r.stress)}` : ''}${r.armor ? `, ${SLT(r.armor)}` : ''}`);
   refreshTrackers();
@@ -203,7 +205,8 @@ function beastStats(b) {
   const tm = t.match(/(Проворность|Сила|Искусность|Инстинкт|Влияние|Знание)\s*:\s*\+?(\d+)/);
   const em = t.match(/Уклонение\s*:\s*\+?(\d+)/);
   const am = t.match(/Атака:\s*(Вплотную|Близко|Средне|Далеко)\s+(Проворность|Сила|Искусность|Инстинкт|Влияние|Знание)\s+(d\d+)(?:\s*\+\s*(\d+))?\s+(физ|маг)/);
-  return { trait: tm ? TRAIT_BY_NAME[tm[1]] : null, traitBonus: tm ? +tm[2] : 0, eva: em ? +em[1] : 0, fragile: /Хрупкость/.test(t),
+  const adv = (t.match(/Преимущества при\s*:\s*([^А-ЯЁ]*?)(?=\s+Атака:|$)/) || [])[1];
+  return { adv: adv ? adv.trim().replace(/[,.\s]+$/, '') : '', trait: tm ? TRAIT_BY_NAME[tm[1]] : null, traitBonus: tm ? +tm[2] : 0, eva: em ? +em[1] : 0, fragile: /Хрупкость/.test(t),
     attack: am ? { range: am[1], trait: TRAIT_BY_NAME[am[2]], die: am[3], bonus: +(am[4] || 0), magic: am[5] === 'маг' } : null };
 }
 
@@ -261,6 +264,7 @@ function cardRollsHTML(c) {
   const x = derive();
   const cnt = (q) => (q.count === 'prof' ? x.prof : q.count === 'spell' ? Math.max(1, x.traits[x.spellKey]?.total ?? 1) : q.count);
   const b = [];
+  if (x.beast) return '<span class="small muted">В звериной форме заклинания с карт недоступны</span>';
   if (sc) b.push(x.spellKey ? `<button class="small" data-spell="${esc(c.name)}" data-dc="${dcm ? dcm[1] : ''}">Бросок Заклинания (${TN[x.spellKey]} ${sign(x.traits[x.spellKey].total ?? 0)})${dcm ? `, Сложность ${dcm[1]}` : ''}</button>` : '<span class="small" style="color:var(--danger)">Нужна Характеристика Заклинателя</span>');
   dm.forEach((q, i) => b.push(`<button class="small" data-spelldmg="${esc(c.name)}|${i}">Урон ${cnt(q)}d${q.sides}${q.bonus ? '+' + q.bonus : ''}${q.magic ? ' маг.' : q.phys ? ' физ.' : ''}${q.count === 'prof' ? ' (Мастерство)' : q.count === 'spell' ? ' (Хар. Заклинателя)' : ''}</button>`));
   return b.join('');
@@ -450,6 +454,9 @@ function mechanicsHTML(x) {
     const cur = x.beast;
     parts.push(`<div class="mech"><b>${term('beastform', 'Звериная Форма')}</b>
       ${cur ? `<div class="row"><span class="chip accent">${esc(cur.name)}</span><span class="small">Уклонение +${x.bst.eva}${x.bst.trait ? `, ${TN[x.bst.trait]} +${x.bst.traitBonus}` : ''}${C.play.evolveTrait ? `, Эволюция: ${TN[C.play.evolveTrait]} +1` : ''}${x.bst.attack ? ` · атака ${x.bst.attack.range}, ${TN[x.bst.attack.trait]}, ${x.prof}${x.bst.attack.die}${x.bst.attack.bonus ? '+' + x.bst.attack.bonus : ''}` : ''}</span><button class="ghost" data-act="beast-exit">Выйти из формы</button></div>
+        ${x.bst.adv ? `<div class="small"><b>Преимущество</b> на броски: ${esc(x.bst.adv)}.</div>` : ''}
+        ${x.bst.fragile ? '<div class="small" style="color:var(--danger)">Хрупкость: при Ощутимом уроне и больше форма заканчивается (конструктор снимет её сам).</div>' : ''}
+        <div class="small muted">В форме нельзя атаковать оружием и использовать заклинания с карт. Отмеченные ячейки брони остаются после выхода. На последней Ране форма заканчивается.</div>
         <details><summary>Свойства формы</summary><div class="rich small">${cur.html}</div></details>
         ${x.bst.attack ? `<div class="row small"><button data-act="beast-atk">Атака формой</button><button data-act="beast-dmg">Урон формой</button></div>` : ''}`
       : P.beastPending ? `<div class="row small"><select id="beast-pick">${forms.map((b) => `<option value="${b.id}">${esc(b.name)} (ранг ${b.tier})</option>`).join('')}</select>${P.beastPending === 'evolve' ? `<select id="evolve-trait">${TR.map(([k, n]) => `<option value="${k}">${n} +1</option>`).join('')}</select>` : ''}<button class="primary" data-act="beast-enter">Превратиться</button><button class="ghost" data-act="beast-cancel">Отмена</button></div>`
@@ -488,6 +495,7 @@ function rollerHTML(x) {
   if (x.hasSub('Элементалист')) pre.push(`<label class="row small"><input type="checkbox" id="r-elem"> Элементалист: +2 за 1 Надежду</label>`);
   if (x.hasSub('Адепт')) pre.push(`<label class="row small"><input type="checkbox" id="r-adept"> Адепт: Опыт за Стресс вместо Надежды, модификатор ×2</label>`);
   if (P.fx?.attack1) pre.push('<span class="small chip ok">Беспощадный: +1 к атакам до отдыха</span>');
+  if (x.bst?.adv) pre.push(`<span class="small">Звериная форма даёт преимущество на: ${esc(x.bst.adv)}. Поставь 1 в «Преимущества», если бросок про это.</span>`);
   if (P.rally) pre.push(`<label class="row small"><input type="checkbox" id="r-rally"> + Кость Сплочения d${P.rally}</label>`);
   pre.push(`<label class="row small"><input type="checkbox" id="r-tag"> ${term('tag-team-roll', 'Командный бросок')} (3 Надежды, раз за сессию)</label>`);
   return `<section class="panel roller"><h2>${term('duality-dice', 'Кости Дуальности')} <span class="lbl">2d12</span></h2>
