@@ -801,3 +801,36 @@ document.addEventListener('click', (e) => {
   if (b.dataset.consume != null) return useExtra(+b.dataset.consume);
   if (b.dataset.act === 'start-potion') return useStartPotion();
 });
+
+
+/* ================= ИНВЕНТАРНОЕ ОРУЖИЕ ================= */
+function invWeaponsHTML(x) {
+  const inv = (C.play.invW || []).map((id) => WPN[id]).filter(Boolean);
+  const avail = D.weapons.filter((w) => w.tier <= x.tier && !w.wheelchair && ![C.primary, C.secondary, ...(C.play.invW || [])].includes(w.id)).sort((a, b) => a.slot.localeCompare(b.slot) || b.tier - a.tier || a.name.localeCompare(b.name, 'ru'));
+  return `<div class="stack" style="gap:6px;border-top:1px dashed var(--line);padding-top:10px"><span class="lbl">Инвентарное оружие (${inv.length} из 2)</span>
+    ${inv.map((w, i) => `<div class="spread small"><span class="row" style="gap:6px">${wIcon(w)}<b>${esc(w.name)}</b><span class="muted">${w.slot === 'primary' ? 'основное' : 'вспомогательное'} · ${w.die}${w.bonus ? '+' + w.bonus : ''} · ${esc(w.burden)} · ранг ${w.tier}</span></span>
+      <span class="row"><button class="small" data-wswap="${i}" data-cost="0" title="В спокойной обстановке или на отдыхе">Взять в руки</button><button class="small" data-wswap="${i}" data-cost="1">Взять в бою (1 Стресс)</button><button class="ghost small danger" data-wdrop="${i}">Выбросить</button></span></div>`).join('') || '<div class="small muted">Пусто. Можно нести ещё два оружия и менять их местами с активным.</div>'}
+    ${inv.length < 2 ? `<div class="row small"><select id="inv-w-add" aria-label="Добавить оружие в инвентарь"><option value="">Положить оружие в инвентарь…</option>${avail.map((w) => `<option value="${w.id}">${w.slot === 'primary' ? 'Осн.' : 'Всп.'} · ${esc(w.name)} · ранг ${w.tier}</option>`).join('')}</select><button class="small" data-act="inv-w-add">Добавить</button></div>` : ''}
+    <div class="small muted">Сменить активное оружие на инвентарное можно бесплатно в спокойной обстановке, в бою — за 1 Стресс.</div></div>`;
+}
+function swapWeapon(i, cost) {
+  const x = derive(), P = C.play, inv = P.invW || [], id = inv[i], w = WPN[id]; if (!w) return;
+  const slot = w.slot === 'primary' ? 'primary' : 'secondary';
+  const out = C[slot];
+  if (slot === 'secondary' && x.pw && x.pw.burden.startsWith('Двуруч')) { alertNote('Основное оружие двуручное: вспомогательное взять нельзя. Сначала смени основное.'); return; }
+  if (slot === 'primary' && w.burden.startsWith('Двуруч') && C.secondary && inv.length - 1 + (out ? 1 : 0) >= 2) { alertNote(`${w.name} двуручное: ${WPN[C.secondary]?.name || 'вспомогательное оружие'} придётся убрать в инвентарь, а там нет места. Сначала выброси что-нибудь из инвентаря.`); return; }
+  inv.splice(i, 1);
+  if (out) inv.push(out);
+  C[slot] = id;
+  if (slot === 'primary' && w.burden.startsWith('Двуруч') && C.secondary) { inv.push(C.secondary); C.secondary = null; }
+  P.invW = inv.slice(0, 2);
+  let over = 0; if (cost) over = markStress(1, x);
+  addLog(`Смена оружия: ${esc(w.name)} в руках${out ? `, ${esc(WPN[out]?.name || '')} в инвентаре` : ''}${cost ? ' (1 Стресс)' : ''}${over ? `, +${RAN(over)}` : ''}`);
+  refreshTrackers();
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.wswap != null) return swapWeapon(+b.dataset.wswap, num(b.dataset.cost));
+  if (b.dataset.wdrop != null) { C.play.invW.splice(+b.dataset.wdrop, 1); return refreshTrackers(); }
+  if (b.dataset.act === 'inv-w-add') { const id = document.getElementById('inv-w-add')?.value; if (!id) return; C.play.invW = [...(C.play.invW || []), id].slice(0, 2); return refreshTrackers(); }
+});

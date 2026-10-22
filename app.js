@@ -647,7 +647,7 @@ function renderSheet() {
   </div>
   <div class="stack">
     ${rollerHTML(x)}
-    <section class="panel"><h2 class="spread">Оружие<button class="small" data-gear="1">Сменить снаряжение</button></h2>${weapons || '<div class="empty">Оружие не выбрано.</div>'}${isWarrior(x) ? '<div class="small muted">Боевая Подготовка воина уже добавлена к физическому урону.</div>' : ''}</section>
+    <section class="panel"><h2 class="spread">Оружие<button class="small" data-gear="1">Сменить снаряжение</button></h2>${weapons || '<div class="empty">Оружие не выбрано.</div>'}${invWeaponsHTML(x)}${isWarrior(x) ? '<div class="small muted">Боевая Подготовка воина уже добавлена к физическому урону.</div>' : ''}</section>
     <section class="panel"><h2>${term('experience', 'Опыт')}</h2>${x.exps.filter((e) => e.name).map((e) => `<div class="spread"><span>${esc(e.name)}${e.fromLevel ? ' <span class="small muted">(с повышения)</span>' : ''}</span><span class="chip accent mono">${sign(e.mod)}</span></div>`).join('') || '<div class="muted">Опыт не заполнен.</div>'}</section>
     <section class="panel"><h2>Карты домена</h2><div class="small muted">${term('loadout-and-vault', 'Рука')}: ${handCards.length} из 5.</div>
       ${handCards.map((c) => dcard(c, true)).join('') || '<div class="muted">В Руке пусто.</div>'}
