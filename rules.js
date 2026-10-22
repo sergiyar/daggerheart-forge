@@ -667,23 +667,27 @@ function levelHTML(x) {
   const cardOpts = (sel, id) => `<select id="${id}" data-lvl-card="${id}"><option value="">— выбери —</option>${D.cards.filter((c) => x.cls.domains.includes(c.domain) && c.level <= next && !C.cards.includes(c.id) && !C.vault.includes(c.id)).sort((a, b) => b.level - a.level || a.name.localeCompare(b.name, 'ru')).map((c) => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>ур. ${c.level} · ${esc(c.name)} · ${esc(D.domains[c.domain])}</option>`).join('')}</select>`;
   if (dr.opts.includes('card')) sub.push(`<div><b>Дополнительная карта</b> ${cardOpts(dr.extraCard, 'lvl-extra')}</div>`);
   if (dr.opts.includes('sub')) sub.push(`<div class="small"><b>Подкласс:</b> откроется ${x.LV.sub === 0 ? 'Специализация' : 'Мастерство'}: ${(x.sub?.[x.LV.sub === 0 ? 'specialization' : 'mastery'] || []).map((f) => esc(f.name)).join(', ')}</div>`);
-  const ready = slotsUsed === 2 && (!dr.opts.includes('traits') || dr.traits.length === dr.opts.filter((o) => o === 'traits').length * 2) && (!dr.opts.includes('exp') || dr.exps.length === 2) && (!dr.opts.includes('card') || dr.extraCard) && dr.card && (!ach || dr.newExp.trim());
+  const ready = slotsUsed === 2 && (!dr.opts.includes('traits') || dr.traits.length === dr.opts.filter((o) => o === 'traits').length * 2) && (!dr.opts.includes('exp') || dr.exps.length === 2) && (!dr.opts.includes('card') || dr.extraCard) && dr.card && (!ach || dr.newExp.trim()) && (!dr.swapFrom || dr.swapTo);
   return `<section class="panel" id="lvl-panel"><h2>Повышение до ${next} уровня</h2>
     <div class="stack"><div><span class="lbl">Шаг 1 · Достижения ранга</span>${ach ? `<div class="small">На ${next} уровне: новый Опыт +2, Мастерство +1${next > 2 ? ', снимаются все отметки с характеристик' : ''}.</div><input id="lvl-newexp" data-lvl-newexp value="${esc(dr.newExp)}" placeholder="Новый Опыт">` : '<div class="small muted">На этом уровне достижений нет.</div>'}</div>
     <div><span class="lbl">Шаг 2 · Два улучшения</span> <span class="small">${slotsUsed} из 2</span><div class="optlist">${optRows}</div></div>
     ${sub.length ? `<div class="stack">${sub.join('')}</div>` : ''}
     <div><span class="lbl">Шаг 3 · Пороги урона</span><div class="small">+1 к обоим порогам, учтётся само.</div></div>
-    <div><span class="lbl">Шаг 4 · Новая карта домена</span><div class="small muted">Твоего уровня или ниже. Ляжет в Руку, если там меньше 5 карт, иначе в Хранилище.</div>${cardOpts(dr.card, 'lvl-card')}</div>
+    <div><span class="lbl">Шаг 4 · Новая карта домена</span><div class="small muted">Твоего уровня или ниже. Ляжет в Руку, если там меньше 5 карт, иначе в Хранилище.</div>${cardOpts(dr.card, 'lvl-card')}
+      <div class="stack" style="gap:4px;margin-top:8px"><span class="small"><b>Необязательно:</b> обменять одну ранее взятую карту на другую того же уровня или ниже.</span>
+        <div class="row small"><select id="lvl-swap-from" data-lvl-swap="from"><option value="">— не меняю —</option>${[...C.cards, ...C.vault].map((id) => CARD[id]).filter(Boolean).map((c) => `<option value="${c.id}" ${dr.swapFrom === c.id ? 'selected' : ''}>ур. ${c.level} · ${esc(c.name)}</option>`).join('')}</select>
+        ${dr.swapFrom ? `<span>→</span><select id="lvl-swap-to" data-lvl-swap="to"><option value="">— выбери замену —</option>${D.cards.filter((c) => x.cls.domains.includes(c.domain) && c.level <= (CARD[dr.swapFrom]?.level || 0) && !C.cards.includes(c.id) && !C.vault.includes(c.id) && c.id !== dr.card && c.id !== dr.extraCard).sort((a, b) => b.level - a.level || a.name.localeCompare(b.name, 'ru')).map((c) => `<option value="${c.id}" ${dr.swapTo === c.id ? 'selected' : ''}>ур. ${c.level} · ${esc(c.name)} · ${esc(D.domains[c.domain])}</option>`).join('')}</select>` : ''}</div></div></div>
     <div class="row"><button class="primary" data-act="lvl-apply" ${ready ? '' : 'disabled'}>Готово: ${next} уровень</button><button class="ghost" data-act="lvl-cancel">Отмена</button>${ready ? '' : '<span class="small muted">Заполни все шаги</span>'}</div></div></section>`;
 }
 function levelHistoryHTML(x) {
-  const rows = Object.entries(C.levels || {}).filter(([lv]) => +lv <= x.L).sort((a, b) => a[0] - b[0]).map(([lv, e]) => `<div class="small">· ${lv} ур.: ${(e.opts || []).map((o) => { const a = ADV.find((q) => q.id === o); return o === 'traits' ? `+1 ${e.traits.map((k) => TN[k]).join(', ')}` : o === 'exp' ? '+1 к двум Опытам' : a.t.split(' (')[0]; }).join('; ')}${e.newExp ? `; Опыт «${esc(e.newExp)}»` : ''}${e.card ? `; карта «${esc(CARD[e.card]?.name || '')}»` : ''}</div>`);
+  const rows = Object.entries(C.levels || {}).filter(([lv]) => +lv <= x.L).sort((a, b) => a[0] - b[0]).map(([lv, e]) => `<div class="small">· ${lv} ур.: ${(e.opts || []).map((o) => { const a = ADV.find((q) => q.id === o); return o === 'traits' ? `+1 ${e.traits.map((k) => TN[k]).join(', ')}` : o === 'exp' ? '+1 к двум Опытам' : a.t.split(' (')[0]; }).join('; ')}${e.newExp ? `; Опыт «${esc(e.newExp)}»` : ''}${e.card ? `; карта «${esc(CARD[e.card]?.name || '')}»` : ''}${e.swap ? `; обмен «${esc(CARD[e.swap.from]?.name || '')}» → «${esc(CARD[e.swap.to]?.name || '')}»` : ''}</div>`);
   return rows.length ? `<div class="stack" style="gap:2px">${rows.join('')}</div>` : '';
 }
 function lvlApply() {
   const x = derive(), next = x.L + 1, dr = lvlDraft;
   C.levels = C.levels || {};
-  C.levels[next] = { opts: dr.opts, from: dr.from, traits: dr.traits, exps: dr.exps, newExp: dr.newExp.trim(), card: dr.card, extraCard: dr.extraCard };
+  C.levels[next] = { opts: dr.opts, from: dr.from, traits: dr.traits, exps: dr.exps, newExp: dr.newExp.trim(), card: dr.card, extraCard: dr.extraCard, swap: dr.swapFrom && dr.swapTo ? { from: dr.swapFrom, to: dr.swapTo } : null };
+  if (dr.swapFrom && dr.swapTo) { C.cards = C.cards.map((c) => (c === dr.swapFrom ? dr.swapTo : c)); C.vault = C.vault.map((c) => (c === dr.swapFrom ? dr.swapTo : c)); }
   for (const id of [dr.card, dr.extraCard].filter(Boolean)) { if (C.cards.length < 5) C.cards.push(id); else C.vault.push(id); }
   C.level = next; lvlDraft = null;
   addLog(`Новый уровень: ${next}`); refreshTrackers();
@@ -691,6 +695,7 @@ function lvlApply() {
 function lvlUndo() {
   const L = num(C.level), e = (C.levels || {})[L]; if (!e) return;
   for (const id of [e.card, e.extraCard].filter(Boolean)) { C.cards = C.cards.filter((c) => c !== id); C.vault = C.vault.filter((c) => c !== id); }
+  if (e.swap) { C.cards = C.cards.map((c) => (c === e.swap.to ? e.swap.from : c)); C.vault = C.vault.map((c) => (c === e.swap.to ? e.swap.from : c)); }
   delete C.levels[L]; C.level = L - 1; addLog(`Уровень ${L} отменён`); refreshTrackers();
 }
 
@@ -732,7 +737,7 @@ document.addEventListener('click', (e) => {
     return keepScroll(render);
   }
   const act = b.dataset.act; if (!act) return;
-  if (act === 'lvl-start') { lvlDraft = { opts: [], from: {}, traits: [], exps: [], newExp: '', card: '', extraCard: '' }; return keepScroll(render); }
+  if (act === 'lvl-start') { lvlDraft = { opts: [], from: {}, traits: [], exps: [], newExp: '', card: '', extraCard: '', swapFrom: '', swapTo: '' }; return keepScroll(render); }
   if (act === 'lvl-cancel') { lvlDraft = null; return keepScroll(render); }
   if (act === 'lvl-apply') return lvlApply();
   if (act === 'lvl-undo') return lvlUndo();
@@ -759,6 +764,7 @@ document.addEventListener('change', (e) => {
   if (!lvlDraft) return;
   if (el.dataset.lvlTrait) { const k = el.dataset.lvlTrait, n = lvlDraft.opts.filter((o) => o === 'traits').length * 2; lvlDraft.traits = lvlDraft.traits.filter((q) => q !== k); if (el.checked) { if (lvlDraft.traits.length < n) lvlDraft.traits.push(k); else el.checked = false; } return keepScroll(render); }
   if (el.dataset.lvlExp) { const i = +el.dataset.lvlExp; lvlDraft.exps = lvlDraft.exps.filter((q) => q !== i); if (el.checked) { if (lvlDraft.exps.length < 2) lvlDraft.exps.push(i); else el.checked = false; } return keepScroll(render); }
+  if (el.dataset.lvlSwap) { if (el.dataset.lvlSwap === 'from') { lvlDraft.swapFrom = el.value; lvlDraft.swapTo = ''; } else lvlDraft.swapTo = el.value; return keepScroll(render); }
   if (el.dataset.lvlCard) { if (el.id === 'lvl-card') lvlDraft.card = el.value; else lvlDraft.extraCard = el.value; return keepScroll(render); }
 });
 document.addEventListener('input', (e) => {
