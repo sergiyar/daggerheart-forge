@@ -329,6 +329,7 @@ function render() {
   const app = $('#app');
   if (C.view === 'sheet') app.innerHTML = renderSheet();
   else if (C.view === 'ref') app.innerHTML = renderRef();
+  else if (C.view === 'notes') app.innerHTML = renderNotes();
   else app.innerHTML = renderBuilder();
   hidePop();
 }

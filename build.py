@@ -1,5 +1,5 @@
 h=open('index.html',encoding='utf8').read()
-for f in ['data.js','icons.js','bronk.js','app.js','rules.js','boot.js']:
+for f in ['data.js','icons.js','bronk.js','app.js','rules.js','notes.js','boot.js']:
     js=open(f,encoding='utf8').read().replace('</script','<\\/script')
     tag=f'<script src="{f}"></script>'
     assert tag in h, f
