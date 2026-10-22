@@ -28,6 +28,13 @@ const NB_HELP = `# Заметки
 - \`---\` — разделитель
 - \`||секрет||\` — спойлер, открывается кликом: ||Аликсиан — ...||
 
+## Ссылки между заметками
+- \`[[Название заметки]]\` — ссылка, клик открывает заметку: [[Персонажи]]
+- \`[[Название|свой текст]]\` — ссылка со своим текстом: [[Сессии|журнал сессий]]
+- если заметки нет, ссылка подсвечена пунктиром, клик создаёт её: [[Капитан шхуны]]
+- в редакторе после \`[[\` появляются подсказки
+- внизу заметки видно, кто на неё ссылается; при переименовании ссылки обновляются сами
+
 ## Сворачивание
 Клик по заголовку сворачивает раздел до следующего заголовка того же уровня. Пункт списка с вложенными пунктами сворачивается кликом по треугольнику.
 
@@ -43,6 +50,27 @@ const nbKids = (pid) => nb().items.filter((i) => i.parent === pid).sort((a, b) =
 function nbPath(it) { const p = []; let cur = it && nbGet(it.parent); while (cur) { p.unshift(cur.name); cur = nbGet(cur.parent); } return p; }
 function nbDescendants(id) { const out = []; const walk = (pid) => nbKids(pid).forEach((k) => { out.push(k.id); walk(k.id); }); walk(id); return out; }
 
+/* ---------- Ссылки между заметками ---------- */
+const unesc = (s) => String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+const nbKey = (s) => String(s || '').trim().toLowerCase().replace(/ё/g, 'е');
+function nbByName(name) { const k = nbKey(name); return nb().items.find((i) => i.type === 'note' && nbKey(i.name) === k) || null; }
+const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function nbLinkRe(name) { return new RegExp('\\[\\[\\s*' + reEsc(name.trim()).replace(/[её]/gi, '[её]') + '\\s*(\\|[^\\]\\n]*)?\\]\\]', 'gi'); }
+function nbBacklinks(it) { if (!it?.name?.trim()) return []; const re = nbLinkRe(it.name); return nb().items.filter((n) => n.type === 'note' && n.id !== it.id && re.test(n.body) && ((re.lastIndex = 0), true)); }
+function nbRenameLinks(oldName, newName) {
+  if (!oldName.trim() || !newName.trim() || nbKey(oldName) === nbKey(newName)) return 0;
+  let n = 0; const re = nbLinkRe(oldName);
+  for (const it of nb().items) if (it.type === 'note') it.body = it.body.replace(re, (m, lab) => { n++; return `[[${newName.trim()}${lab || ''}]]`; });
+  return n;
+}
+function nbOpenLink(name) {
+  const N = nb(); let it = nbByName(name);
+  if (!it) { const cur = nbGet(N.sel); it = nbAdd('note', name.trim(), cur ? (cur.type === 'folder' ? cur.id : cur.parent) : null); N.mode = 'edit'; addLog(`Создана заметка «${esc(name.trim())}»`); }
+  else N.mode = 'view';
+  N.sel = it.id; N.q = ''; let p = nbGet(it.parent); while (p) { p.open = true; p = nbGet(p.parent); }
+  save(); render(); window.scrollTo(0, 0);
+}
+
 /* ---------- Markdown ---------- */
 function mdInline(s) {
   const codes = [];
@@ -50,6 +78,10 @@ function mdInline(s) {
   t = t.replace(/\|\|(.+?)\|\|/g, '<span class="spoiler" tabindex="0" role="button" aria-label="Спойлер, нажми чтобы открыть">$1</span>');
   t = t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
   t = t.replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g, '$1<i>$2</i>');
+  t = t.replace(/\[\[([^\]|\n]+?)(?:\|([^\]\n]+?))?\]\]/g, (_, name, label) => {
+    const target = nbByName(unesc(name));
+    return `<a href="#" class="wl${target ? '' : ' missing'}" data-nblink="${name.trim()}" title="${target ? 'Открыть заметку' : 'Такой заметки нет — нажми, чтобы создать'}">${(label || name).trim()}</a>`;
+  });
   t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   return t.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[+i]}</code>`);
 }
@@ -123,8 +155,9 @@ function renderNotes() {
         <select id="nb-move" data-nbmove="${sel.id}" aria-label="Переместить в папку"><option value="">В корень</option>${folders.map((f) => `<option value="${f.id}" ${sel.parent === f.id ? 'selected' : ''}>${esc([...nbPath(f), f.name].join(' / '))}</option>`).join('')}</select>
         <span class="tabs nb-mode"><button data-nbmode="view" aria-pressed="${N.mode !== 'edit'}">Просмотр</button><button data-nbmode="edit" aria-pressed="${N.mode === 'edit'}">Редактировать</button></span>
         <button class="ghost danger small" data-nbdel="${sel.id}">Удалить</button></div></div>
-    ${N.mode === 'edit' ? `<textarea id="nb-body" data-nbbody="${sel.id}" spellcheck="true" placeholder="Пиши в Markdown: # заголовок, - список, - [ ] дело, **жирный**, ||спойлер||">${esc(sel.body)}</textarea><div class="small muted">Сохраняется само. Шпаргалка по разметке — в заметке «Как пользоваться».</div>`
-      : `<div class="md" id="nb-view">${sel.body.trim() ? mdRender(sel.body) : '<p class="muted">Пустая заметка. Нажми «Редактировать».</p>'}</div>`}`
+    ${N.mode === 'edit' ? `<div class="nb-edwrap"><textarea id="nb-body" data-nbbody="${sel.id}" spellcheck="true" placeholder="Пиши в Markdown: # заголовок, - список, - [ ] дело, **жирный**, ||спойлер||, [[ссылка на заметку]]">${esc(sel.body)}</textarea><div id="nb-ac" class="nb-ac" hidden role="listbox"></div></div><div class="small muted">Сохраняется само. Шпаргалка по разметке — в заметке «Как пользоваться».</div>`
+      : `<div class="md" id="nb-view">${sel.body.trim() ? mdRender(sel.body) : '<p class="muted">Пустая заметка. Нажми «Редактировать».</p>'}</div>`}
+    ${(() => { const bl = nbBacklinks(sel); return bl.length ? `<div class="nb-back"><span class="lbl">Ссылаются сюда</span><div class="row">${bl.map((n) => `<a href="#" class="wl" data-nblink="${esc(n.name)}">${esc(n.name)}</a>`).join('')}</div></div>` : ''; })()}`
     : selFolder ? `<div class="nb-head"><input id="nb-title" data-nbtitle="${selFolder.id}" value="${esc(selFolder.name)}" aria-label="Название папки"><div class="row small"><span class="muted">Папка · ${nbKids(selFolder.id).length} внутри</span>
         <select id="nb-move" data-nbmove="${selFolder.id}" aria-label="Переместить папку"><option value="">В корень</option>${folders.filter((f) => f.id !== selFolder.id && !nbDescendants(selFolder.id).includes(f.id)).map((f) => `<option value="${f.id}" ${selFolder.parent === f.id ? 'selected' : ''}>${esc([...nbPath(f), f.name].join(' / '))}</option>`).join('')}</select>
         <button class="ghost danger small" data-nbdel="${selFolder.id}">Удалить папку</button></div></div><div class="empty">Выбери заметку слева или создай новую в этой папке.</div>`
@@ -197,3 +230,45 @@ document.addEventListener('keydown', (e) => {
     t.dispatchEvent(new Event('input', { bubbles: true }));
   }
 });
+
+/* ---------- ссылки: клики, переименование, подсказки ---------- */
+document.addEventListener('click', (e) => {
+  if (C.view !== 'notes') return;
+  const a = e.target.closest('[data-nblink]'); if (a) { e.preventDefault(); return nbOpenLink(unesc(a.dataset.nblink)); }
+  const opt = e.target.closest('[data-nbac]'); if (opt) { e.preventDefault(); return nbAcAccept(opt.dataset.nbac); }
+});
+document.addEventListener('focusin', (e) => { if (e.target.id === 'nb-title') e.target.dataset.old = e.target.value; });
+document.addEventListener('change', (e) => {
+  if (C.view !== 'notes' || e.target.id !== 'nb-title') return;
+  const el = e.target, it = nbGet(el.dataset.nbtitle); if (!it || it.type !== 'note') return;
+  const n = nbRenameLinks(el.dataset.old || '', el.value); el.dataset.old = el.value;
+  if (n) save();
+  keepScroll(render);
+  if (n) { const er = document.getElementById('nb-err'); if (er) { er.style.color = 'var(--ok)'; er.textContent = `Ссылок на заметку обновлено: ${n}`; } }
+});
+function nbAcState(t) { const before = t.value.slice(0, t.selectionStart); const m = before.match(/\[\[([^\]\n|]*)$/); return m ? { q: m[1], start: before.length - m[1].length } : null; }
+function nbAcUpdate(t) {
+  const box = document.getElementById('nb-ac'); if (!box) return;
+  const st = nbAcState(t); if (!st) { box.hidden = true; return; }
+  const k = nbKey(st.q), self = nbGet(t.dataset.nbbody);
+  const list = nb().items.filter((i) => i.type === 'note' && i !== self && nbKey(i.name).includes(k)).sort((a, b) => (nbKey(a.name).startsWith(k) ? 0 : 1) - (nbKey(b.name).startsWith(k) ? 0 : 1) || a.name.localeCompare(b.name, 'ru')).slice(0, 8);
+  const fresh = st.q.trim() && !nbByName(st.q) ? `<button class="nb-ac-it" data-nbac="${esc(st.q.trim())}">+ новая: ${esc(st.q.trim())}</button>` : '';
+  box.innerHTML = list.map((n, i) => `<button class="nb-ac-it ${i ? '' : 'first'}" data-nbac="${esc(n.name)}">${esc(n.name)}<span class="small muted"> ${esc(nbPath(n).join(' / '))}</span></button>`).join('') + fresh;
+  box.hidden = !box.innerHTML;
+}
+function nbAcAccept(name) {
+  const t = document.getElementById('nb-body'); if (!t) return; const st = nbAcState(t); if (!st) return;
+  const after = t.value.slice(t.selectionStart).replace(/^[^\]\n]*\]\]/, '');
+  const ins = unesc(name) + ']]';
+  t.value = t.value.slice(0, st.start) + ins + after; const pos = st.start + ins.length;
+  t.focus(); t.setSelectionRange(pos, pos); t.dispatchEvent(new Event('input', { bubbles: true }));
+  const box = document.getElementById('nb-ac'); if (box) box.hidden = true;
+}
+document.addEventListener('input', (e) => { if (e.target.id === 'nb-body') nbAcUpdate(e.target); });
+document.addEventListener('keyup', (e) => { if (e.target.id === 'nb-body' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) nbAcUpdate(e.target); });
+document.addEventListener('keydown', (e) => {
+  if (e.target.id !== 'nb-body') return;
+  const box = document.getElementById('nb-ac'); if (!box || box.hidden) return;
+  if (e.key === 'Escape') { box.hidden = true; e.stopPropagation(); }
+  if (e.key === 'Enter' || e.key === 'Tab') { const first = box.querySelector('[data-nbac]'); if (first) { e.preventDefault(); e.stopImmediatePropagation(); nbAcAccept(first.dataset.nbac); } }
+}, true);
