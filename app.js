@@ -4,6 +4,9 @@ const D = window.DH;
 const byId = (arr) => Object.fromEntries(arr.map((x) => [x.id, x]));
 const CLS = byId(D.classes), ANC = byId(D.ancestries), COM = byId(D.communities);
 const CARD = byId(D.cards), WPN = byId(D.weapons), ARM = byId(D.armor), ITEM = byId(D.items);
+/* Боец: «Я и Есть Оружие» — оружие без предмета, характеристика по выбору игрока */
+WPN['brawler-strike'] = { id: 'brawler-strike', name: 'Удар бойца', en: 'fist', slot: 'primary', tier: 1, get trait() { try { return C.brawlerTrait || 'str'; } catch (e) { return 'str'; } }, range: 'Вплотную', die: 'd8+d6', bonus: 0, magic: false, burden: 'Двуручное (голые руки)', virtual: true,
+  features: [{ name: 'Я и Есть Оружие', text: 'Урон d8+d6, Мастерство на обе кости. Пока это оружие активно, +1 к Уклонению.' }] };
 
 const TR = [
   ['agi', 'Проворность', 'Пробежать, прыгнуть, маневрировать', 'agility'],
@@ -20,6 +23,9 @@ const POOL = [2, 1, 1, 0, 0, -1];
 /* ---------- гайды и советы (собственные тексты конструктора) ---------- */
 const ROLE = {
   assassin: 'Наёмный убийца: метит жертву Меткой Смерти и добивает её, мастер засад и ядов.',
+  brawler: 'Боец без оружия: кулаки как клинок, серии комбо-ударов. Танк-громила или мастер стоек.',
+  warlock: 'Заключил договор с покровителем: тратит Милость на его помощь, проклятия и защиту.',
+  witch: 'Ведьма: сглаз врагов, гадания, травы и обереги или чары луны.',
   bard: 'Душа компании и поддержка: вдохновляет союзников костями Сплочения, силён в разговоре и магии слова.',
   druid: 'Превращается в зверей и управляет природой. Гибкий: разведка, бой в звериной форме, лечение или стихии.',
   guardian: 'Танк. Держит удар, прикрывает союзников и не даёт врагам пройти.',
@@ -40,10 +46,14 @@ const DOMAIN_INFO = {
   sage: 'природа, звери, растения, исцеление земли',
   splendor: 'божественный свет, исцеление, защита от смерти',
   valor: 'стойкость, защита союзников, щит и броня',
+  dread: 'тёмная магия страха, мучений и потусторонних сил',
 };
 /* Типичные раскладки — подсказка конструктора, не официальная таблица. */
 const LAYOUT = {
   assassin: { agi: 2, fin: 1, kno: 1, ins: 0, pre: 0, str: -1 },
+  brawler: { str: 2, agi: 1, ins: 1, fin: 0, pre: 0, kno: -1 },
+  warlock: { pre: 2, kno: 1, ins: 1, agi: 0, fin: 0, str: -1 },
+  witch: { kno: 2, ins: 1, pre: 1, agi: 0, fin: 0, str: -1 },
   bard: { pre: 2, fin: 1, kno: 1, agi: 0, ins: 0, str: -1 },
   druid: { ins: 2, agi: 1, pre: 1, str: 0, kno: 0, fin: -1 },
   guardian: { str: 2, agi: 1, pre: 1, ins: 0, kno: 0, fin: -1 },
@@ -167,6 +177,7 @@ const clsIcon = (c, size) => ico('cls-' + c.id, c.domains[0], size);
 const dmIcon = (dm, size = 'sm') => ico('dm-' + dm, dm, size);
 const site = (path, label = 'На сайте') => `<a class="site" href="${SITE}${path}" target="_blank" rel="noopener">${label} ↗</a>`;
 const portraitHTML = (size = '') => C.portrait ? `<img class="portrait ${size}" src="${C.portrait}" alt="Портрет персонажа">` : '';
+const PLAYTEST_CHIP = '<span class="chip warn" title="На ru.daggerheart.su карты домена Ужас пока в версии плейтеста; в книге Hope & Fear формулировки могут отличаться">плейтест</span>';
 const term = (id, text) => `<span class="term" data-rule="${id}">${text}</span>`;
 
 /* Числовые модификаторы из свойств брони и оружия: «+1 к Показателю Брони», «−1 к Уклонению» и т.п. */
@@ -200,7 +211,7 @@ function derive() {
   const L = Math.max(1, num(C.level));
   const LV = levelState(L);
   const prof = 1 + LV.prof + num(C.adj.prof);
-  const pw = WPN[C.primary] || null;
+  const pw = WPN[C.primary] || (cls?.id === 'brawler' && !C.secondary ? WPN['brawler-strike'] : null);
   const sw = pw && pw.burden.startsWith('Двуруч') ? null : WPN[C.secondary] || null;
   const arm = ARM[C.armor] || null;
   const tier = tierOf(L);
@@ -241,6 +252,10 @@ function derive() {
   if (LV.eva) eva.parts.push(['повышения уровня', LV.eva]);
   if (bst && bst.eva) eva.parts.push([`Звериная форма: ${beast.name}`, bst.eva]);
   if (fx.rogueDodge) eva.parts.push(['Уклонение Плута (до попадания или отдыха)', 2]);
+  if (pw?.id === 'brawler-strike' && cls?.id === 'brawler') eva.parts.push(['Я и Есть Оружие: Удар бойца активен', 1]);
+  const moon = hasSub('Лунные фазы') ? num(C.play.moon) : 0;
+  if (moon >= 5) eva.parts.push(['Лунные фазы: Убывающая Луна', 1]);
+  if (num(C.play.circle) > 0 && hasSub('Круг силы')) eva.parts.push(['Круг силы (пока в круге)', 2]);
   if (C.adj.eva) eva.parts.push(['ручная поправка', num(C.adj.eva)]);
   eva.total = eva.parts.reduce((s, p) => s + p[1], 0);
   const evaCond = [];
@@ -249,6 +264,7 @@ function derive() {
   if (hasSub('Неуловимый хищник')) evaCond.push('+2 против цели с твоей Меткой');
   if (hasSub('Поза скорпиона')) evaCond.push(`+2 против атак цели с Меткой Смерти${C.play.dmark ? ` (${C.play.dmark})` : ''}`);
   if (has('Крылья')) evaCond.push('+2 за Стресс, когда летишь');
+  if (hasSub('Превосходная защита')) evaCond.push(`+${tier} против одной атаки за 1 Концентрацию`);
 
   const hp = { parts: [] };
   if (cls) hp.parts.push([cls.name, cls.hp]);
@@ -285,12 +301,16 @@ function derive() {
   if (hasSub('Неустрашимый')) both(3, 'Заступник: Неустрашимый');
   if (hasSub('Вознесённый')) { sev += 4; thr.parts.push(['Крылатый страж: Вознесённый (только Тяжёлый)', '+4']); }
   if (arm && inHand('fortified-armor')) both(2, 'Карта «Усиленная броня»');
+  if (hasSub('Стойкий')) { sev += 3; thr.parts.push(['Джаггернаут: Стойкий (только Тяжёлый)', '+3']); }
   /* временные эффекты */
   thr.baseMaj = maj; thr.baseSev = sev;
   const tmp = (v, vs, src) => { maj += v; sev += vs; thr.temp.push([src, v === vs ? `+${v}` : `+${v} / +${vs}`]); };
   if (fx.earth && hasSub('Стихийное воплощение')) tmp(prof, prof, 'Воплощение Земли (Мастерство)');
   if (fx.transcend && hasSub('Трансцендентность')) tmp(0, 4, 'Трансцендентность: +4 к Тяжёлому');
   if (armFeat('Усиленное') && ar.total > 0 && num(C.play.armor) >= ar.total) tmp(2, 2, 'Броня «Усиленное»: все ячейки отмечены');
+  if (moon === 4) tmp(3, 3, 'Лунные фазы: Полнолуние');
+  if (num(C.play.circle) > 0 && hasSub('Круг силы')) tmp(2, 2, 'Круг силы (пока в круге)');
+  if (fx.mantle && hasSub('Мантия покровителя')) tmp(tier, tier, 'Мантия покровителя (ранг)');
   if (C.adj.thr) tmp(num(C.adj.thr), num(C.adj.thr), 'ручная поправка');
   thr.maj = maj; thr.sev = sev;
 
@@ -475,7 +495,7 @@ function stepGear(x) {
   const topVal = best.length ? C.traits[best[0]] : null;
   const maxT = x.tier, gt = f.gTier && num(f.gTier) <= maxT ? num(f.gTier) : 0;
   const tierOk = (it) => it.tier <= maxT && (!gt || it.tier === gt);
-  const prim = D.weapons.filter((w) => tierOk(w) && w.slot === 'primary' && (C.wheelchair ? w.wheelchair : !w.wheelchair)).sort((a, b) => b.tier - a.tier);
+  const prim = [...(x.cls?.id === 'brawler' ? [WPN['brawler-strike']] : []), ...D.weapons.filter((w) => tierOk(w) && w.slot === 'primary' && (C.wheelchair ? w.wheelchair : !w.wheelchair)).sort((a, b) => b.tier - a.tier)];
   const trFilter = (w) => {
     const tk = SPELL_TRAIT(w.trait, x);
     if (f.wTrait === 'all') return true;
@@ -514,7 +534,8 @@ function stepGear(x) {
   return `${tierBar}<h2>Основное оружие</h2>
     <div class="filters"><label class="row small">Показать <select id="wTrait" data-filter="wTrait">${traitOpts}</select></label>
       <label class="row small"><input type="checkbox" data-toggle="wheelchair" ${C.wheelchair ? 'checked' : ''}> боевая коляска вместо оружия</label></div>
-    <div class="optlist">${prim.filter(trFilter).map((w) => wRow(w, 'primary')).join('') || '<div class="empty">Под этот фильтр ничего нет.</div>'}</div>
+    ${x.cls?.id === 'brawler' ? `<div class="note">${ico('cls-brawler', 'valor', 'sm')} <b>Я и Есть Оружие:</b> боец может драться голыми руками — «Удар бойца» считается основным оружием, пока у тебя нет других активных оружий, и даёт +1 к Уклонению. <label class="row small" style="margin-top:6px">Характеристика удара <select id="brawler-trait" data-bind="brawlerTrait">${TR.map(([k, n]) => `<option value="${k}" ${(C.brawlerTrait || 'str') === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>` : ''}
+    <div class="optlist">${prim.filter((w) => w.virtual || trFilter(w)).map((w) => wRow(w, 'primary')).join('') || '<div class="empty">Под этот фильтр ничего нет.</div>'}</div>
     <h2>Вспомогательное оружие</h2>
     ${twoH ? '<div class="note">Основное оружие двуручное, вспомогательное взять нельзя.</div>' : `<div class="optlist"><button class="opt" data-pick="secondary" data-val="" aria-pressed="${!C.secondary}"><span class="radio"></span><span>Без вспомогательного оружия</span></button>${secs.map((w) => wRow(w, 'secondary')).join('')}</div>`}
     <h2>Броня</h2><div class="optlist">${noArmorRow(x)}${arms.map(armRow).join('')}</div>
@@ -559,7 +580,7 @@ function stepCards(x) {
         const on = chosen.includes(c.id);
         const full = !on && chosen.length >= need;
         return `<button class="opt check" data-card="${c.id}" aria-pressed="${on}" ${full ? 'disabled' : ''}><span class="radio"></span><span class="stack" style="gap:4px">
-          <span class="spread"><b>${esc(c.name)}</b><span class="chips"><span class="chip">${esc(c.type)}</span><span class="chip">ур. ${c.level}</span><span class="chip" title="Стоимость Призыва">Призыв ${c.recall}</span></span></span>
+          <span class="spread"><b>${esc(c.name)}</b><span class="chips"><span class="chip">${esc(c.type)}</span><span class="chip">ур. ${c.level}</span><span class="chip" title="Стоимость Призыва">Призыв ${c.recall}</span>${c.playtest ? PLAYTEST_CHIP : ''}</span></span>
           <span class="rich small">${c.text}</span>${c.id === 'bare-bones' ? `<span class="small ${C.armor === 'none' ? '' : 'muted'}" style="${C.armor === 'none' ? 'color:var(--ok)' : ''}">${C.armor === 'none' ? 'Ты без брони: конструктор пересчитает Броню и пороги по этой карте.' : 'Работает, только если на шаге «Снаряжение» выбрать «Без брони».'}</span>` : ''}<span>${site('/domain-card/' + c.id, 'Карта на сайте')}</span>${c.type === 'Заклинание' && !x.spellKey ? '<span class="small" style="color:var(--danger)">Нужен Бросок Заклинания, а у подкласса нет Характеристики Заклинателя.</span>' : ''}</span></button>`;
       }).join('')}</div>`;
   }).join('');
@@ -615,7 +636,7 @@ function renderSheet() {
       ${w.features.map((f) => `<div class="small">${f.name ? `<b>${esc(f.name)}:</b> ` : ''}${f.text}</div>`).join('')}</div>`;
   }).join('');
   const handCards = C.cards.map((id) => CARD[id]).filter(Boolean), vaultCards = C.vault.map((id) => CARD[id]).filter(Boolean);
-  const dcard = (c, inHand) => `<div class="dcard ${inHand ? '' : 'vault'}" style="--c:var(--dm-${c.domain})"><div class="spread"><span class="row" style="gap:8px">${dmIcon(c.domain)}<b>${esc(c.name)}</b></span><span class="chips"><span class="chip">${esc(D.domains[c.domain])}</span><span class="chip">${esc(c.type)}</span><span class="chip">ур. ${c.level}</span><span class="chip">Призыв ${c.recall}</span></span></div>
+  const dcard = (c, inHand) => `<div class="dcard ${inHand ? '' : 'vault'}" style="--c:var(--dm-${c.domain})"><div class="spread"><span class="row" style="gap:8px">${dmIcon(c.domain)}<b>${esc(c.name)}</b></span><span class="chips"><span class="chip">${esc(D.domains[c.domain])}</span><span class="chip">${esc(c.type)}</span><span class="chip">ур. ${c.level}</span><span class="chip">Призыв ${c.recall}</span>${c.playtest ? PLAYTEST_CHIP : ''}</span></div>
     <div class="rich small">${c.text}</div>${inHand ? featUseHTML({ name: c.name, text: c.text }, 'card') : ''}<div class="row">${inHand ? `<button class="ghost" data-tovault="${c.id}">В Хранилище</button>` : `<button data-tohand="${c.id}" ${handCards.length >= 5 ? 'disabled' : ''}>В Руку (отметить ${c.recall} Стресса)</button><button class="ghost" data-tohand="${c.id}" data-free="1" ${handCards.length >= 5 ? 'disabled' : ''}>В Руку на отдыхе</button>`}<button class="ghost danger" data-dropcard="${c.id}">Убрать</button>${site('/domain-card/' + c.id)}</div></div>`;
   const addable = D.cards.filter((c) => x.cls.domains.includes(c.domain) && c.level <= x.L && !C.cards.includes(c.id) && !C.vault.includes(c.id));
   const feats = allActiveFeats(x).filter((a) => a.src !== 'card').map((a) => feat(a.f, a.label) + featUseHTML(a.f, a.src)).join('');
@@ -699,7 +720,7 @@ function renderRef() {
   return `<div class="stack"><h1>Справочник</h1><input id="ref-q" placeholder="Поиск: правило, карта, оружие, предмет, родословная…" value="${esc(refQuery)}" aria-label="Поиск по справочнику">
     <div class="row" role="group" aria-label="Тип">${REF_TYPES.map(([k, n]) => `<button class="chipbtn ${refType === k ? 'sel' : ''}" data-reftype="${k}" aria-pressed="${refType === k}">${n}</button>`).join('')}</div>
     <div id="ref-res">${refResults()}</div><dialog id="ref-dlg" aria-label="Карточка справочника"></dialog>
-    <p class="foot">Данные: Daggerheart SRD 1.0 и 2.0 (класс «Ассасин» из Hope &amp; Fear) в переводе ru.daggerheart.su. This product includes materials from the Daggerheart System Reference Document 1.0 and 2.0, © Critical Role, LLC, under the terms of the Darrington Press Community Gaming (DPCGL) License. Неофициальный фанатский инструмент. Иконки: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a>, CC BY 3.0, авторы: ${(window.DH_ICON_AUTHORS || []).map(esc).join(', ')}. Оригинальный арт смотри по ссылкам «На сайте».</p></div>`;
+    <p class="foot">Данные: Daggerheart SRD 1.0 и 2.0 (классы и домен Ужас из Hope &amp; Fear) в переводе ru.daggerheart.su. This product includes materials from the Daggerheart System Reference Document 1.0 and 2.0, © Critical Role, LLC, under the terms of the Darrington Press Community Gaming (DPCGL) License. Неофициальный фанатский инструмент. Иконки: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a>, CC BY 3.0, авторы: ${(window.DH_ICON_AUTHORS || []).map(esc).join(', ')}. Оригинальный арт смотри по ссылкам «На сайте».</p></div>`;
 }
 let REF_INDEX = null, REF_SHOWN = [], refOpenIdx = -1;
 function refOpen(i) {
@@ -847,6 +868,7 @@ document.addEventListener('input', (e) => {
     setPath(el.dataset.bind, el.dataset.num ? num(el.value) : el.value);
     save();
     const s = $('#summary'); if (s) s.innerHTML = renderSummary(derive());
+    if (el.dataset.bind === 'brawlerTrait' || el.dataset.rerender) { keepScroll(render); return; }
     if (C.view === 'sheet' && /^(level|adj\.|subTier)/.test(el.dataset.bind)) { clearTimeout(window.__rt); window.__rt = setTimeout(() => { const id = el.id; refreshTrackers(); const n = document.getElementById(id); if (n) { n.focus(); } }, 500); }
     if (C.view === 'build' && C.step === STEPS.findIndex((s) => s.id === 'exp')) { /* обновим индикатор шага без потери фокуса */ document.querySelectorAll('.step-btn').forEach((b, i) => b.classList.toggle('done', STEPS[i].done(derive()))); }
   } else if (el.id === 'ref-q') { refQuery = el.value; $('#ref-res').innerHTML = refResults(); }

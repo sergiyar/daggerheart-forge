@@ -32,6 +32,6 @@ python3 build.py   # → dist/index.html и daggerheart-forge.html (один ф�
 
 Неофициальный фанатский некоммерческий проект.
 
-This product includes materials from the Daggerheart System Reference Document 1.0 and 2.0 (класс «Ассасин» из Hope & Fear), © Critical Role, LLC, under the terms of the Darrington Press Community Gaming (DPCGL) License. More information can be found at https://www.daggerheart.com. Русский перевод SRD: ru.daggerheart.su.
+This product includes materials from the Daggerheart System Reference Document 1.0 and 2.0 (классы Ассасин, Боец, Колдун, Ведьма и домен Ужас из Hope & Fear), © Critical Role, LLC, under the terms of the Darrington Press Community Gaming (DPCGL) License. More information can be found at https://www.daggerheart.com. Русский перевод SRD: ru.daggerheart.su.
 
 Иконки: [game-icons.net](https://game-icons.net), CC BY 3.0 (авторы: Lorc, Delapouite, Carl Olsen, John Colburn, Skoll, Willdabeast, DarkZaitzev).

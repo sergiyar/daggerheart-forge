@@ -70,11 +70,15 @@ data = {}
 
 # ---------- domains & classes ----------
 DOMAINS = {'arcana': 'Аркана', 'blade': 'Клинок', 'bone': 'Кость', 'codex': 'Кодекс', 'grace': 'Грация',
-           'midnight': 'Полночь', 'sage': 'Мудрость', 'splendor': 'Величие', 'valor': 'Доблесть'}
+           'midnight': 'Полночь', 'sage': 'Мудрость', 'splendor': 'Величие', 'valor': 'Доблесть', 'dread': 'Ужас'}
 data['domains'] = DOMAINS
 
 # Классы из дополнений, которые вошли в SRD 2.0 (Public Game Content по DPCGL)
-EXTRA_CLASSES = {'playtest-assassin': ('assassin', 'cls_assassin.html', 'Hope & Fear')}
+EXTRA_CLASSES = {'playtest-assassin': ('assassin', 'cls_assassin.html', 'Hope & Fear'),
+                 'playtest-fighter': ('brawler', 'cls_brawler.html', 'Hope & Fear'),
+                 'playtest-warlock': ('warlock', 'cls_warlock.html', 'Hope & Fear'),
+                 'witch': ('witch', 'cls_witch.html', 'Hope & Fear')}
+EXTRA_DOMAINS = {'playtest-dread': 'dread'}  # домен Ужас из Hope & Fear (SRD 2.0); на сайте пока версия плейтеста
 
 def parse_class(c):
     cid = c['id']
@@ -125,7 +129,7 @@ def parse_class(c):
         'id': cid, 'source': source, 'slug': c['id'] if source else None, 'name': txt(c.select_one('.title')),
         'tagline': clean(c.select_one('.description')),
         'intro': clean(intro),
-        'domains': c['data-domain'].split(','),
+        'domains': [EXTRA_DOMAINS.get(dm, dm) for dm in c['data-domain'].split(',')],
         'evasion': int(txt(stats['starting-evasion-score'])),
         'hp': int(txt(stats['hit-points'])),
         'hopeFeature': feats[0] if feats else None,
@@ -159,9 +163,10 @@ data['communities'] = heritage('community.html')
 # ---------- domain cards ----------
 cards = []
 for c in soup('domain-card.html').select('.main_body .card'):
-    if not is_core(c):
+    dm = EXTRA_DOMAINS.get(c.get('data-domain'))
+    if not is_core(c) and not dm:
         continue
-    cards.append({'id': c['id'], 'name': txt(c.select_one('.title')), 'domain': c['data-domain'],
+    cards.append({'id': c['id'], 'name': txt(c.select_one('.title')), 'domain': dm or c['data-domain'], **({'playtest': True} if dm else {}),
                   'level': int(txt(c.select_one('.banner_text')) or 0),
                   'recall': int(txt(c.select_one('.stress_text')) or 0),
                   'type': txt(c.select_one('.label')), 'text': clean(c.select_one('.description'))})

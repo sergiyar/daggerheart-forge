@@ -14,11 +14,12 @@ WANT = {
     'cls-bard': ['lyre', 'harp'], 'cls-druid': ['wolf-head', 'oak'], 'cls-guardian': ['checked-shield'],
     'cls-ranger': ['high-shot', 'pocket-bow'], 'cls-rogue': ['hood', 'cloak-dagger'], 'cls-seraph': ['angel-wings', 'winged-sword'],
     'cls-sorcerer': ['fire-ray', 'magic-swirl'], 'cls-warrior': ['crossed-swords'], 'cls-wizard': ['pointy-hat', 'wizard-staff'], 'cls-assassin': ['hooded-assassin', 'stiletto'],
+    'cls-brawler': ['punch', 'boxing-glove'], 'cls-warlock': ['warlock-eye', 'warlock-hood'], 'cls-witch': ['witch-flight', 'cauldron'],
     'i-poison': ['poison-bottle'],
     # домены
     'dm-arcana': ['magic-swirl'], 'dm-blade': ['broadsword'], 'dm-bone': ['crossed-bones'], 'dm-codex': ['spell-book'],
     'dm-grace': ['rose'], 'dm-midnight': ['moon', 'night-sky'], 'dm-sage': ['oak-leaf', 'leaf-swirl'],
-    'dm-splendor': ['sunbeams', 'sun'], 'dm-valor': ['round-shield', 'shield-reflect'],
+    'dm-splendor': ['sunbeams', 'sun'], 'dm-valor': ['round-shield', 'shield-reflect'], 'dm-dread': ['terror', 'haunting'],
     # родословные
     'anc-clank': ['robot-golem'], 'anc-drakona': ['dragon-head'], 'anc-dwarf': ['dwarf-face'], 'anc-elf': ['elf-ear'],
     'anc-faerie': ['fairy-wings', 'fairy'], 'anc-faun': ['goat'], 'anc-firbolg': ['troll'], 'anc-fungril': ['mushroom-gills'],

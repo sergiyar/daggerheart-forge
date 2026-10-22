@@ -241,6 +241,8 @@ const SELF_FX = {
   'Смертоносная решимость': { stress: -2 },
   'Метка Смерти': { special: 'dmark' },
   'Токсичные смеси': { special: 'toxins' },
+  'Комбо Удары': { special: 'combo' },
+  'Концентрация': { special: 'focus' },
 };
 /* Карты с несколькими опциями: отдельные кнопки для эффектов, которые конструктор применяет сам */
 const CARD_ACTIONS = {
@@ -328,6 +330,8 @@ function useFeature(key, kind, n) {
     if (fx.special === 'element') P.elementPending = true;
     if (fx.special === 'mark') P.markPending = true;
     if (fx.special === 'dmark') P.dmark = 'цель';
+    if (fx.special === 'combo') { const s = num(P.comboDie) || 4, r = comboChain(s), sum = r.reduce((q, v) => q + v, 0); showVerdict(`<div class="total">+${sum}</div><div class="how">Комбо удар d${s}</div><div class="math">[${r.join(' → ')}] · прибавь к урону атаки</div>`); addLog(`Комбо удар d${s}: <b class="mono">+${sum}</b> <span class="muted">[${r.join(' → ')}]</span>`); }
+    if (fx.special === 'focus') { const nn = Math.max(0, x.traits.ins.total ?? 0); const r = Array.from({ length: nn }, () => d(6)); P.focus = Math.min(6, r.length ? Math.max(...r) : 0); addLog(`Концентрация: [${r.join(', ') || 'нет костей'}] → ${P.focus}`); }
     if (fx.special === 'toxins') { const r = d(4) + 1; P.toxins = Math.min(99, num(P.toxins) + r); addLog(`Токсичные смеси: +${r} жетонов (1d4+1), всего ${P.toxins}`); }
   }
   addLog(`${esc(name)}${kind === 'hope' ? ` (−${HOP(n)})` : kind === 'stress' ? ` (+${STR(n)})` : ''}${over ? `, Стресс переполнен: +${RAN(over)}` : ''}`);
@@ -343,7 +347,7 @@ const REST_MOVES = {
 function restHTML(x) {
   const P = C.play;
   if (restState) {
-    const list = REST_MOVES[restState.type];
+    const list = [...REST_MOVES[restState.type], ...(x.cls?.id === 'warlock' ? [['tribute', `Дань покровителю: +${favorGain(x)} Милости`]] : [])];
     return `<section class="panel" id="rest-panel"><h2>${restState.type === 'short' ? term('short-rest', 'Короткий отдых') : term('long-rest', 'Продолжительный отдых')}</h2>
       <div class="small muted">Выбери два хода, один и тот же можно дважды. «Для союзника» значит, что эффект достаётся ему, а не тебе. Перед ходами можно бесплатно поменять карты между Рукой и Хранилищем.</div>
       ${[0, 1].map((i) => `<div class="row"><span class="lbl">Ход ${i + 1}</span><select id="rest-m${i}" data-rest="${i}">${list.map(([id, t]) => `<option value="${id}" ${restState.moves[i] === id ? 'selected' : ''}>${t}</option>`).join('')}</select><label class="row small"><input type="checkbox" id="rest-a${i}" data-rest-ally="${i}" ${restState.ally[i] ? 'checked' : ''}> для союзника / вместе с союзником</label></div>`).join('')}
@@ -361,6 +365,8 @@ function endEffects(kind) { /* kind: rest | long */
   P.impenUsed = false; P.unstoppable = 0; /* сцена закончилась */
   P.dmark = ''; P.firstStrike = false; /* Метка Смерти — до следующего отдыха */
   if (kind === 'long') P.toxins = 0; /* Токсичные смеси */
+  P.talisman = 0; P.circle = 0; /* Ведунья: жетоны снимаются на отдыхе */
+  ['wrath', 'mantle'].forEach((k) => delete P.fx[k]); /* до Тяжёлого урона или конца сцены */
   P.uses = Object.fromEntries(Object.entries(P.uses || {}).filter(([k]) => { const c = featLimitOf(k); return !(c.limit === 'rest' || (kind === 'long' && c.limit === 'long')); }));
   if (kind === 'long' && P.companion) { if (num(P.companion.stress) >= companionStressMax()) P.companion.stress = companionStressMax() - 1; }
 }
@@ -377,6 +383,7 @@ function applyRest() {
     if (m === 'stressAll') { P.stress = 0; log.push('весь Стресс снят'); if (P.companion) P.companion.stress = 0; }
     if (m === 'armorAll') { if (ally) log.push('броня союзника починена'); else { P.armor = 0; log.push('броня починена'); } }
     if (m === 'project') log.push('работа над проектом');
+    if (m === 'tribute') { const g = favorGain(x); P.favor = favorOf() + g; log.push(`Милость +${g}`); }
   }
   const type = restState.type;
   endEffects(type === 'long' ? 'long' : 'rest');
@@ -393,6 +400,7 @@ function sessionStart() {
     let dice = Array.from({ length: n + extra }, () => d(4)); if (extra) { dice.sort((a, b) => b - a); dice = dice.slice(0, n); }
     P.prayer = dice; addLog(`Кости Молитвы: ${dice.join(', ') || 'нет (Характеристика Заклинателя 0 или ниже)'}`);
   }
+  if (x.hasSub('Лунные фазы')) { P.moon = d(6); addLog(`Лунные фазы: ${P.moon} — ${MOON[P.moon]}`); }
   addLog('Начало сессии'); refreshTrackers();
 }
 function sessionEnd() {
@@ -484,6 +492,49 @@ function mechanicsHTML(x) {
       <div class="small muted">Отметь Стресс у свойства ниже: +1d4+1 жетонов. При успешной атаке оружием потрать жетон, чтобы отравить цель.${x.hasSub('Двойной клык') ? ' «Двойной клык»: по цели с Меткой Смерти второй жетон — второй яд.' : ''} Продолжительный отдых сжигает все жетоны.</div>
       <div class="stack" style="gap:3px">${known.map(([n, eff, dmg]) => `<div class="row small"><button class="small" data-poison="${esc(n)}" ${t ? '' : 'disabled'}>${esc(n)}</button><span>${esc(eff)}${dmg ? ' <span class="muted">(или галочкой в настройках урона)</span>' : ''}</span></div>`).join('')}</div></div>`);
   }
+  if (hasF('Комбо Удары')) {
+    const die = num(P.comboDie) || 4;
+    parts.push(`<div class="mech"><b>Кость Комбо</b> <select id="combo-die" data-bind="play.comboDie" data-num="1" data-rerender="1">${[4, 6, 8, 10, 12].map((v) => `<option value="${v}" ${die === v ? 'selected' : ''}>d${v}</option>`).join('')}</select>
+      ${x.hasSub('Состояние потока') ? `<div class="row small"><button data-act="combo" data-how="focus" ${num(P.focus) ? '' : 'disabled'}>Комбо за 1 Концентрацию</button></div>` : ''}
+      <div class="small muted">После урона успешной атаки Вплотную отметь Стресс у свойства «Комбо Удары» ниже: бросай кость, пока результат не станет меньше предыдущего, сумма всех бросков прибавляется к урону. Раз за ранг одну опцию повышения можно потратить на рост кости (d4 → d6 → d8…) — выбери кость здесь.</div></div>`);
+  }
+  if (x.hasSub('Концентрация')) {
+    const f = num(P.focus);
+    parts.push(`<div class="mech"><b>Концентрация</b> <span class="chip ${f ? 'accent' : ''}">${f} из 6</span>
+      <div class="row small"><span class="muted">Сосредоточиться — кнопка у свойства «Концентрация» ниже (${Math.max(0, x.traits.ins.total ?? 0)}d6, берётся наибольшее)</span><button class="ghost" data-act="focus-spend" ${f ? '' : 'disabled'}>Потратить 1</button></div>
+      <div class="row small"><span>Стойка</span><input id="stance" data-bind="play.stance" value="${esc(P.stance || '')}" placeholder="название стойки" style="flex:1;min-width:140px"><button data-act="stance" ${f || x.hasSub('Состояние потока') ? '' : 'disabled'}>Встать в стойку (${x.hasSub('Состояние потока') ? '1 Концентрация или 1 Стресс' : '1 Концентрация'})</button></div>
+      ${x.hasSub('Залп концентрации') ? `<div class="row small"><button data-act="focus-volley" ${f ? '' : 'disabled'}>Залп концентрации: атака Инстинктом (1 Концентрация)</button><button data-act="focus-volley-dmg">Урон залпа ${x.prof}d20+3</button></div>` : ''}
+      <div class="small muted">Стойка держится, пока не получишь Тяжёлый урон, не отметишь последнюю Рану или не сменишь её; иначе до конца сцены. Список стоек — на листе «Боевые стойки» в книге (в переводе сайта его пока нет), впиши свою.</div></div>`);
+  }
+  if (hasF('Сглаз')) {
+    const max = Math.max(0, x.traits[x.spellKey]?.total ?? 0);
+    parts.push(`<div class="mech"><b>Сглаз</b> <span class="chip">до ${max} целей</span> <span class="chip">−${x.tier} к их урону и Сложности</span>
+      <div class="row small"><input id="hexes" data-bind="play.hexes" value="${esc(P.hexes || '')}" placeholder="кто под Сглазом (через запятую)" style="flex:1;min-width:160px"></div>
+      <div class="small muted">Отметь Стресс у свойства «Сглаз», чтобы временно Сглазить существо в пределах Далёкой дистанции.${x.hasSub('Злой умысел') ? ' Злой умысел: твои атаки по ним с преимуществом.' : ''}${x.hasSub('Гнев бледного света') ? ' Гнев бледного света: если они проваливают атаку, отмечают Стресс.' : ''}</div></div>`);
+  }
+  if (x.hasSub('Лунные фазы')) {
+    const m = num(P.moon);
+    parts.push(`<div class="mech"><b>Лунные фазы</b> ${m ? `<span class="bigdie sm">${m}</span> <span class="chip accent">${MOON[m]}</span>` : '<span class="chip">брось в начале сессии</span>'}
+      <div class="row small"><button data-act="moon-roll">Бросить d6</button>${m ? '<button data-act="moon-up">+1 к кости (1 Надежда, раз за отдых)</button>' : ''}</div>
+      <div class="small muted">Полнолуние и Убывающая Луна уже учтены в порогах и Уклонении, Растущая Луна — в уроне оружием.</div></div>`);
+  }
+  if (x.hasSub('Зачарованный талисман') || x.hasSub('Круг силы')) {
+    const sp = Math.max(0, x.traits[x.spellKey]?.total ?? 0);
+    parts.push(`<div class="mech"><b>Обереги Ведуньи</b>
+      ${x.hasSub('Зачарованный талисман') ? `<div class="row small"><span>Талисман: <b>${num(P.talisman)}</b> жетонов</span><input type="number" id="talisman-n" min="1" value="1" style="width:56px"><button data-act="talisman">Зачаровать за столько Надежды</button><button class="ghost" data-act="talisman-use" ${num(P.talisman) ? '' : 'disabled'}>−1 Рана носителю (жетон)</button></div>` : ''}
+      ${x.hasSub('Круг силы') ? `<div class="row small"><span>Круг силы: <b>${num(P.circle)}</b> жетонов</span><button data-act="circle" ${num(P.circle) ? 'disabled' : ''}>Начертить (${sp} жетонов)</button><button class="ghost" data-act="circle-tick" ${num(P.circle) ? '' : 'disabled'}>Бросок или уклонение в круге: −1</button><button class="ghost" data-act="circle-end" ${num(P.circle) ? '' : 'disabled'}>Вышла из круга</button></div>${num(P.circle) ? '<div class="small" style="color:var(--ok)">В круге: +2 к порогам и Уклонению (учтено), +2 к броскам атаки.</div>' : ''}` : ''}
+      <div class="small muted">Жетоны снимаются на отдыхе.</div></div>`);
+  }
+  if (hasF('Милость')) {
+    const fv = favorOf(), pd = patronDie(x);
+    parts.push(`<div class="mech"><b>Милость покровителя</b> <span class="chip accent">${fv}</span> <span class="chip">Кость Покровителя d${pd}</span>
+      <div class="impact"><label><span class="lbl">Покровитель</span><input id="patron" data-bind="play.patron" value="${esc(P.patron || '')}"></label><label><span class="lbl">Сфера влияния</span><input id="patron-sphere" data-bind="play.patronSphere" value="${esc(P.patronSphere || '')}" placeholder="Война, Хаос, Любовь…"></label></div>
+      <div class="row small"><button data-act="favor" data-n="-1" ${fv ? '' : 'disabled'}>−1 Милость</button><button class="ghost" data-act="favor" data-n="1">+1</button><button data-act="patron-help" ${fv ? '' : 'disabled'}>Помощь покровителя: +d${pd} к броску (1 Милость)</button></div>
+      ${x.hasSub('Ярость покровителя') ? `<div class="row small">${P.fx?.wrath ? `<span class="chip ok">Ярость: +${x.tier}d${pd} к урону</span><button class="ghost" data-act="wrath-end">Нанёс Тяжёлый урон / конец сцены</button>` : `<button data-act="wrath" ${fv ? '' : 'disabled'}>Ярость покровителя (1 Милость)</button>`}</div>` : ''}
+      ${x.hasSub('Мантия покровителя') ? `<div class="row small">${P.fx?.mantle ? `<span class="chip ok">Мантия: пороги +${x.tier} (учтено), преимущество на запугивание</span><button class="ghost" data-act="mantle-end">Получил Тяжёлый урон / конец сцены</button>` : `<button data-act="mantle" ${fv ? '' : 'disabled'}>Мантия покровителя (1 Милость)</button>`}</div>` : ''}
+      ${x.hasSub('Объятия вечности') ? `<div class="row small"><span>Объятия вечности:</span><input type="number" id="embrace-n" min="1" value="1" style="width:56px"><button data-act="embrace" ${fv && !num(P.uses?.['sub|Объятия вечности']) ? '' : 'disabled'}>Бросить столько костей за Милость (раз за отдых)</button></div>` : ''}
+      <div class="small muted">На отдыхе можно выбрать ход «Дань покровителю» (+${favorGain(x)} Милости). После броска с Надеждой можно взять Милость вместо Надежды (кнопка появится под броском). Остальные свойства за Милость отмечай кнопкой «−1».</div></div>`);
+  }
   if (x.hasSub('Компаньон')) parts.push(companionHTML(x));
   if (hasF('Звериная Форма')) {
     const forms = D.beastforms.filter((b) => b.tier <= x.tier);
@@ -511,6 +562,12 @@ function mechanicsHTML(x) {
   if (!parts.length) return '';
   return `<section class="panel"><h2>Механики класса</h2>${parts.join('')}<div class="err" id="mech-err"></div></section>`;
 }
+/* ---------- Ведьма, Колдун, Боец ---------- */
+const MOON = { 1: 'Новолуние: Надежда предотвращает Лёгкий урон', 2: 'Растущая Луна: +2 к урону', 3: 'Растущая Луна: +2 к урону', 4: 'Полнолуние: +3 к порогам', 5: 'Убывающая Луна: +1 к Уклонению', 6: 'Убывающая Луна: +1 к Уклонению' };
+function favorOf() { return C.play.favor == null ? 3 : num(C.play.favor); }
+function favorGain(x) { return Math.max(0, x.traits[x.spellKey || 'pre']?.total ?? 0); }
+function patronDie(x) { return x.L >= 5 ? 8 : 6; }
+function comboChain(s) { const r = [d(s)]; while (r.length < 60) { const v = d(s); r.push(v); if (v < r[r.length - 2]) break; } return r; }
 /* ---------- Ассасин ---------- */
 function deathDie(x) { return x.hasSub('Удар в спину') ? 8 : x.hasSub('Внезапная атака') ? 6 : 4; }
 const POISONS = [
@@ -634,6 +691,7 @@ function postRollHTML(x) {
   if (x.has('Адаптивность') && failed && L.picksUsed) b.push(`<button data-post="adapt">Адаптивность: переброс (1 Стресс)</button>`);
   if (x.has('Везунчик') && !num(P.uses?.['anc|Везунчик'])) b.push(`<button data-post="lucky">Везунчик: переброс Костей Дуальности (3 Надежды, раз за сессию)</button>`);
   if (P.mark && failed && L.attack) b.push(`<button data-post="mark">Снять Метку и перебросить</button>`);
+  if (x.cls?.features.some((f) => f.name === 'Милость') && L.withHope && !L.react && !L.favorDone) b.push(`<button data-post="favor">Милость вместо Надежды</button>`);
   if (x.hasSub('Истребление') && L.withHope && !L.react && !L.slayerDone && num(P.slayer) < x.prof) b.push(`<button data-post="slayer">d6 в Кости Истребления вместо Надежды</button>`);
   const sn = num(P.strange);
   if (sn && !L.strangeDone && (L.h === sn || L.f === sn) && x.cls?.features.some((f) => f.name === 'Странные закономерности')) b.push(`<span>Выпало ${sn}:</span><button data-post="strange-hope">+1 Надежда</button><button data-post="strange-stress">−1 Стресс</button>`);
@@ -649,6 +707,7 @@ function postRoll(kind) {
   if (kind === 'adapt') { markStress(1, x); addLog('Адаптивность: переброс за 1 Стресс'); save(); return reroll(); }
   if (kind === 'lucky') { if (num(P.hope) < 3) { err.textContent = 'Нужно 3 Надежды.'; return; } P.hope -= 3; P.uses = P.uses || {}; P.uses['anc|Везунчик'] = 1; addLog('Везунчик: переброс за 3 Надежды'); save(); return reroll(); }
   if (kind === 'mark') { P.mark = ''; addLog('Метка снята ради переброса'); save(); return reroll(); }
+  if (kind === 'favor') { P.hope = Math.max(0, num(P.hope) - 1); P.favor = favorOf() + 1; L.favorDone = true; addLog('Милость вместо Надежды'); }
   if (kind === 'slayer') { P.hope = Math.max(0, num(P.hope) - 1); P.slayer = num(P.slayer) + 1; L.slayerDone = true; addLog('Кость Истребления в резерв вместо Надежды'); }
   if (kind === 'strange-hope') { gainHope(1); L.strangeDone = true; addLog('Странные закономерности: +1 Надежда'); }
   if (kind === 'strange-stress') { P.stress = Math.max(0, num(P.stress) - 1); L.strangeDone = true; addLog('Странные закономерности: −1 Стресс'); }
@@ -670,6 +729,9 @@ function dmgOptsHTML(x) {
   sec.forEach((f) => { const m = strip(f.text).match(/\+(\d+)\s*к урону основного/); if (m) o.push(`<label class="row small"><input type="checkbox" id="d-pair" data-v="${m[1]}"> ${esc(f.name)}: +${m[1]} по цели вплотную к тебе</label>`); });
   if (x.hasSub('Адреналин') && P.cond?.vulnerable) o.push(`<span class="small chip ok">Адреналин: +${x.L} к урону, пока Уязвим</span>`);
   if (P.unstoppable) o.push(`<span class="small chip ok">Неудержимый: +${P.unstoppable} к урону</span>`);
+  if (x.hasSub('Лунные фазы') && [2, 3].includes(num(P.moon))) o.push('<span class="small chip ok">Растущая Луна: +2 к урону</span>');
+  if (P.fx?.wrath && x.hasSub('Ярость покровителя')) o.push(`<span class="small chip ok">Ярость покровителя: +${x.tier}d${patronDie(x)}</span>`);
+  if (x.cls?.features.some((f) => f.name === 'Комбо Удары')) o.push('<span class="small muted">Комбо удар — кнопка в «Механиках класса» после урона атаки Вплотную.</span>');
   if (P.dmark && x.cls?.features.some((f) => f.name === 'Метка Смерти')) o.push(`<label class="row small"><input type="checkbox" id="d-dmark" checked> Цель с Меткой Смерти (${esc(P.dmark)}): +${x.tier}d${deathDie(x)}</label>`);
   if (x.hasSub('Первый удар')) o.push(`<label class="row small"><input type="checkbox" id="d-first" ${P.firstStrike ? '' : 'checked'}> Первый удар: первая успешная атака в сцене, урон ×2</label>`);
   if (x.hasSub('Токсичные смеси') && num(P.toxins)) {
@@ -690,6 +752,7 @@ function rollDamage(id, crit, override) {
   const toxinsNeed = (ch('d-ivy') ? 1 : 0) + (ch('d-fearleaf') ? 1 : 0);
   if (toxinsNeed > num(P.toxins)) { if (err) err.textContent = `Не хватает жетонов яда: нужно ${toxinsNeed}.`; return; }
   const sides = num((w.die.match(/d(\d+)/) || [])[1]);
+  const sides2 = num((w.die.match(/\+d(\d+)/) || [])[1]); /* Удар бойца: d8+d6 */
   const n = Math.max(1, x.prof + (ch('d-pred') ? 1 : 0));
   const parts = [];
   const powerful = (w.features || []).some((f) => /дополнительную\s+кость урона и отбросьте/i.test(strip(f.text)));
@@ -698,7 +761,8 @@ function rollDamage(id, crit, override) {
   if (powerful) { const low = Math.min(...rolls); rolls.splice(rolls.indexOf(low), 1); parts.push(`${w.features.find((f) => /дополнительную/.test(strip(f.text))).name}: отброшена ${low}`); }
   let total = rolls.reduce((s, v) => s + v, 0) + (w.bonus || 0);
   parts.unshift(`${n}d${sides} [${rolls.join(', ')}]${w.bonus ? ' +' + w.bonus : ''}`);
-  if (crit) { total += sides * n; parts.push(`крит +${sides * n}`); }
+  if (sides2) { const r2 = Array.from({ length: n }, () => d(sides2)); total += r2.reduce((s, v) => s + v, 0); parts.splice(1, 0, `${n}d${sides2} [${r2.join(', ')}]`); }
+  if (crit) { const cm = (sides + sides2) * n; total += cm; parts.push(`крит +${cm}`); }
   if (isWarrior(x) && !w.magic && !override) { total += x.L; parts.push(`Боевая подготовка +${x.L}`); }
   const add = (v, t) => { total += v; parts.push(`${t} +${v}`); };
   if (ch('d-tusks')) add(d(6), 'Бивни');
@@ -710,6 +774,8 @@ function rollDamage(id, crit, override) {
   if (ch('d-pair')) add(num(g('d-pair').dataset.v), 'вспомогательное оружие');
   if (x.hasSub('Адреналин') && P.cond?.vulnerable) add(x.L, 'Адреналин');
   if (P.unstoppable) add(P.unstoppable, 'Неудержимость');
+  if (x.hasSub('Лунные фазы') && [2, 3].includes(num(P.moon))) add(2, 'Растущая Луна');
+  if (P.fx?.wrath && x.hasSub('Ярость покровителя')) { const r = Array.from({ length: x.tier }, () => d(patronDie(x))); add(r.reduce((s, v) => s + v, 0), `Ярость покровителя [${r.join(',')}]`); }
   if (ch('d-dmark') && P.dmark) { const r = Array.from({ length: x.tier }, () => d(deathDie(x))); add(r.reduce((s, v) => s + v, 0), `Метка Смерти ${x.tier}d${deathDie(x)} [${r.join(',')}]`); }
   if (ch('d-ivy')) add(d(6), 'Плющ Пиявки');
   if (ch('d-fearleaf')) add(num(g('d-fearleaf').dataset.v) || d(12), 'Лист Страха');
@@ -853,6 +919,38 @@ document.addEventListener('click', (e) => {
   if (act === 'unst-end') { P.unstoppable = 0; addLog('Неудержимость закончилась'); return refreshTrackers(); }
   if (act === 'rally-stress') { const r = d(P.rally); P.stress = Math.max(0, num(P.stress) - r); P.rally = 0; addLog(`Кость Сплочения: −${STR(r)}`); return refreshTrackers(); }
   if (act === 'mark-clear') { P.mark = ''; return refreshTrackers(); }
+  if (act === 'combo') {
+    const xx = x(); const s = num(P.comboDie) || 4;
+    if (b.dataset.how === 'focus') { if (!num(P.focus)) return mechErr('Нет Концентрации.'); P.focus--; } else markStress(1, xx);
+    const r = comboChain(s), sum = r.reduce((q, v) => q + v, 0);
+    showVerdict(`<div class="total">+${sum}</div><div class="how">Комбо удар d${s}</div><div class="math">[${r.join(' → ')}] · прибавь к урону атаки</div>`);
+    addLog(`Комбо удар d${s}: <b class="mono">+${sum}</b> <span class="muted">[${r.join(' → ')}]</span>`); return refreshTrackers();
+  }
+  if (act === 'focus-roll') { const xx = x(); const n = Math.max(0, xx.traits.ins.total ?? 0); const r = Array.from({ length: n }, () => d(6)); P.focus = Math.min(6, r.length ? Math.max(...r) : 0); P.uses = P.uses || {}; P.uses['sub|Концентрация'] = 1; addLog(`Концентрация: [${r.join(', ') || 'нет костей'}] → ${P.focus}`); return refreshTrackers(); }
+  if (act === 'focus-spend') { P.focus = Math.max(0, num(P.focus) - 1); return refreshTrackers(); }
+  if (act === 'stance') { const xx = x(); if (num(P.focus)) P.focus--; else if (xx.hasSub('Состояние потока')) markStress(1, xx); else return mechErr('Нет Концентрации.'); addLog(`Стойка: ${esc(P.stance || 'без названия')}`); return refreshTrackers(); }
+  if (act === 'focus-volley') { if (!num(P.focus)) return mechErr('Нет Концентрации.'); P.focus--; save(); return duality('ins', 'Залп концентрации', 0, { attack: true }); }
+  if (act === 'focus-volley-dmg') { const xx = x(); return rollFormula(`${xx.prof}d20+3`); }
+  if (act === 'moon-roll') { P.moon = d(6); addLog(`Лунные фазы: ${P.moon} — ${MOON[P.moon]}`); return refreshTrackers(); }
+  if (act === 'moon-up') { if (num(P.hope) < 1) return mechErr('Нет Надежды.'); P.hope--; P.moon = num(P.moon) >= 6 ? 1 : num(P.moon) + 1; addLog(`Лунные фазы: кость повышена до ${P.moon} — ${MOON[P.moon]}`); return refreshTrackers(); }
+  if (act === 'talisman') { const n = Math.max(1, num(document.getElementById('talisman-n')?.value)); if (num(P.hope) < n) return mechErr(`Не хватает Надежды: нужно ${n}.`); P.hope -= n; P.talisman = num(P.talisman) + n; addLog(`Зачарованный талисман: ${n} жетонов`); return refreshTrackers(); }
+  if (act === 'talisman-use') { P.talisman = Math.max(0, num(P.talisman) - 1); addLog('Талисман: носитель отмечает на 1 Рану меньше'); return refreshTrackers(); }
+  if (act === 'circle') { const xx = x(); P.circle = Math.max(0, xx.traits[xx.spellKey]?.total ?? 0); addLog(`Круг силы: ${P.circle} жетонов`); return refreshTrackers(); }
+  if (act === 'circle-tick') { P.circle = Math.max(0, num(P.circle) - 1); if (!P.circle) addLog('Круг силы рассеялся'); return refreshTrackers(); }
+  if (act === 'circle-end') { P.circle = 0; addLog('Круг силы рассеялся'); return refreshTrackers(); }
+  if (act === 'favor') { P.favor = Math.max(0, favorOf() + num(b.dataset.n)); return refreshTrackers(); }
+  if (act === 'patron-help') {
+    const xx = x(); if (!favorOf()) return mechErr('Нет Милости.'); P.favor = favorOf() - 1; const r = d(patronDie(xx));
+    if (lastDual && lastDual.total != null) { lastDual.bonus = num(lastDual.bonus) + r; addLog(`Помощь покровителя: +${r} → итог ${lastDual.total + lastDual.bonus}`); } else addLog(`Помощь покровителя: +${r} к следующему броску`);
+    return refreshTrackers();
+  }
+  if (act === 'wrath' || act === 'mantle') { if (!favorOf()) return mechErr('Нет Милости.'); P.favor = favorOf() - 1; P.fx[act] = true; addLog(act === 'wrath' ? 'Ярость покровителя' : 'Мантия покровителя'); return refreshTrackers(); }
+  if (act === 'wrath-end' || act === 'mantle-end') { delete P.fx[act.split('-')[0]]; return refreshTrackers(); }
+  if (act === 'embrace') {
+    const xx = x(); const n = Math.min(favorOf(), Math.max(1, num(document.getElementById('embrace-n')?.value)));
+    if (!n) return mechErr('Нет Милости.'); P.favor = favorOf() - n; const r = Array.from({ length: n }, () => d(patronDie(xx))); const heal = r.filter((v) => v >= 4).length;
+    P.hp = Math.max(0, num(P.hp) - heal); P.uses = P.uses || {}; P.uses['sub|Объятия вечности'] = 1; addLog(`Объятия вечности: [${r.join(', ')}] → −${RAN(heal)}`); return refreshTrackers();
+  }
   if (act === 'dmark-clear') { addLog(`Метка Смерти снята${P.dmark ? ': ' + esc(P.dmark) : ''}`); P.dmark = ''; return refreshTrackers(); }
   if (act === 'beast-enter') { const id = document.getElementById('beast-pick').value; P.beast = id; P.evolveTrait = P.beastPending === 'evolve' ? document.getElementById('evolve-trait').value : ''; P.beastPending = ''; addLog(`Звериная форма: ${esc(D.beastforms.find((q) => q.id === id)?.name || '')}`); return refreshTrackers(); }
   if (act === 'beast-cancel') { P.beastPending = ''; return refreshTrackers(); }
