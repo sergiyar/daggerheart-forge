@@ -241,6 +241,30 @@ const CARD_ACTIONS = {
   'Призыв роя': [{ label: 'Бронированные жуки на себя', stress: 1, fx: 'swarm', note: 'следующий удар −1 порог' }],
   'Книга Авы': [{ label: 'Доспехи Тавы на себя', hope: 1, fx: 'tava', note: '+1 к Броне до отдыха' }],
 };
+/** Бросок Заклинания и урон по тексту карты */
+function cardDamages(text) {
+  const t = strip(text).replace(/\s+/g, ' '), out = [];
+  for (const m of t.matchAll(/(\d*)d(\d+)(?:\s*\+\s*(\d+))?([^.;]{0,70}?)урон[а-я]*([^.;]{0,80})/g)) {
+    const tail = (m[4] + ' ' + m[5]).toLowerCase();
+    if (/к (вашему )?броску урона|к урону/.test(m[0].toLowerCase())) continue;
+    const count = /мастерств/.test(tail) ? 'prof' : /характеристик\S* заклинател/.test(tail) ? 'spell' : num(m[1] || 1);
+    out.push({ count, sides: +m[2], bonus: num(m[3]), magic: /маги/.test(tail), phys: /физич/.test(tail) });
+  }
+  return out;
+}
+function cardRollsHTML(c) {
+  const t = strip(c.text);
+  const sc = /Бросок Заклинания/.test(t);
+  const dcm = t.match(/Бросок Заклинания\s*\((\d+)\)/);
+  const dm = cardDamages(c.text);
+  if (!sc && !dm.length) return '';
+  const x = derive();
+  const cnt = (q) => (q.count === 'prof' ? x.prof : q.count === 'spell' ? Math.max(1, x.traits[x.spellKey]?.total ?? 1) : q.count);
+  const b = [];
+  if (sc) b.push(x.spellKey ? `<button class="small" data-spell="${esc(c.name)}" data-dc="${dcm ? dcm[1] : ''}">Бросок Заклинания (${TN[x.spellKey]} ${sign(x.traits[x.spellKey].total ?? 0)})${dcm ? `, Сложность ${dcm[1]}` : ''}</button>` : '<span class="small" style="color:var(--danger)">Нужна Характеристика Заклинателя</span>');
+  dm.forEach((q, i) => b.push(`<button class="small" data-spelldmg="${esc(c.name)}|${i}">Урон ${cnt(q)}d${q.sides}${q.bonus ? '+' + q.bonus : ''}${q.magic ? ' маг.' : q.phys ? ' физ.' : ''}${q.count === 'prof' ? ' (Мастерство)' : q.count === 'spell' ? ' (Хар. Заклинателя)' : ''}</button>`));
+  return b.join('');
+}
 function cardActionsHTML(f) {
   const acts = CARD_ACTIONS[f.name]; if (!acts) return '';
   return acts.map((a, i) => { const on = C.play.fx?.[a.fx]; return `<button class="small ${on ? 'primary' : ''}" data-cardfx="${esc(f.name)}|${i}" ${on ? 'disabled' : ''}>${esc(a.label)} (${a.hope ? HOP(a.hope) : STR(a.stress)})${on ? ': действует' : ''}</button><span class="small muted">${esc(a.note)}</span>`; }).join('');
@@ -248,7 +272,7 @@ function cardActionsHTML(f) {
 function featUseHTML(f, srcKey) {
   const c = featCosts(f.text);
   const fx = SELF_FX[f.name];
-  const special = srcKey === 'card' ? cardActionsHTML(f) : '';
+  const special = srcKey === 'card' ? cardActionsHTML(f) + cardRollsHTML(f) : '';
   if (!c.hope.length && !c.stress.length && !c.limit && !fx) return special ? `<div class="row small use-row">${special}</div>` : '';
   const key = `${srcKey}|${f.name}`;
   const used = num((C.play.uses || {})[key]);
@@ -833,4 +857,25 @@ document.addEventListener('click', (e) => {
   if (b.dataset.wswap != null) return swapWeapon(+b.dataset.wswap, num(b.dataset.cost));
   if (b.dataset.wdrop != null) { C.play.invW.splice(+b.dataset.wdrop, 1); return refreshTrackers(); }
   if (b.dataset.act === 'inv-w-add') { const id = document.getElementById('inv-w-add')?.value; if (!id) return; C.play.invW = [...(C.play.invW || []), id].slice(0, 2); return refreshTrackers(); }
+});
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.spell) {
+    const x = derive(); if (!x.spellKey) return;
+    const dc = document.getElementById('r-dc'); if (dc && b.dataset.dc) dc.value = b.dataset.dc;
+    duality(x.spellKey, 'Заклинание: ' + b.dataset.spell);
+    document.querySelector('.roller')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  if (b.dataset.spelldmg) {
+    const [nm, i] = b.dataset.spelldmg.split('|'), c = C.cards.map((id) => CARD[id]).find((q) => q && q.name === nm); if (!c) return;
+    const q = cardDamages(c.text)[+i], x = derive();
+    const n = q.count === 'prof' ? x.prof : q.count === 'spell' ? Math.max(1, x.traits[x.spellKey]?.total ?? 1) : q.count;
+    const r = Array.from({ length: n }, () => d(q.sides)), total = r.reduce((a, v) => a + v, 0) + q.bonus;
+    const math = `${n}d${q.sides} [${r.join(', ')}]${q.bonus ? ' +' + q.bonus : ''}`;
+    showVerdict(`<div class="total">${total}</div><div class="how">Урон: ${esc(nm)}</div><div class="math">${esc(math)}${q.magic ? ' · магический' : q.phys ? ' · физический' : ''}</div>`);
+    addLog(`Урон ${esc(nm)}: <b class="mono">${total}</b> <span class="muted">(${esc(math)})</span>`);
+    document.querySelector('.roller')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 });
