@@ -73,13 +73,17 @@ DOMAINS = {'arcana': 'Аркана', 'blade': 'Клинок', 'bone': 'Кост�
            'midnight': 'Полночь', 'sage': 'Мудрость', 'splendor': 'Величие', 'valor': 'Доблесть'}
 data['domains'] = DOMAINS
 
-classes = []
-idx = soup('class.html')
-for c in idx.select('.main_body .card'):
-    if not is_core(c):
-        continue
+# Классы из дополнений, которые вошли в SRD 2.0 (Public Game Content по DPCGL)
+EXTRA_CLASSES = {'playtest-assassin': ('assassin', 'cls_assassin.html', 'Hope & Fear')}
+
+def parse_class(c):
     cid = c['id']
-    page = soup(f'cls_{cid}.html').select_one('.main_body')
+    source = None
+    if cid in EXTRA_CLASSES:
+        cid, fname, source = EXTRA_CLASSES[c['id']]
+    else:
+        fname = f'cls_{cid}.html'
+    page = soup(fname).select_one('.main_body')
     stats = {h.get('id'): h.find_next_sibling() for h in page.select('.class-stats h2')}
     cf_h = page.find('h2', id='class-feature')
     feats = []
@@ -117,8 +121,8 @@ for c in idx.select('.main_body .card'):
         return [clean(li) for li in ul.find_all('li', recursive=False)] if ul else []
 
     intro = page.select_one('.main_content > p')
-    classes.append({
-        'id': cid, 'name': txt(c.select_one('.title')),
+    return {
+        'id': cid, 'source': source, 'slug': c['id'] if source else None, 'name': txt(c.select_one('.title')),
         'tagline': clean(c.select_one('.description')),
         'intro': clean(intro),
         'domains': c['data-domain'].split(','),
@@ -130,7 +134,13 @@ for c in idx.select('.main_body .card'):
         'items': ul_after('class-items'),
         'questions': ul_after('background-questions'),
         'connections': ul_after('connections'),
-    })
+    }
+
+classes = []
+idx = soup('class.html')
+for c in idx.select('.main_body .card'):
+    if is_core(c) or (c.get('id') in EXTRA_CLASSES and os.path.exists(os.path.join(RAW, EXTRA_CLASSES[c['id']][1]))):
+        classes.append(parse_class(c))
 data['classes'] = classes
 
 # ---------- ancestries & communities ----------

@@ -238,6 +238,9 @@ const SELF_FX = {
   'Стихийное воплощение': { special: 'element' },
   'Трансцендентность': { fx: 'transcend' },
   'Метка Следопыта': { special: 'mark' },
+  'Смертоносная решимость': { stress: -2 },
+  'Метка Смерти': { special: 'dmark' },
+  'Токсичные смеси': { special: 'toxins' },
 };
 /* Карты с несколькими опциями: отдельные кнопки для эффектов, которые конструктор применяет сам */
 const CARD_ACTIONS = {
@@ -324,6 +327,8 @@ function useFeature(key, kind, n) {
     if (fx.special === 'beast' || fx.special === 'evolve') { P.beastPending = fx.special; }
     if (fx.special === 'element') P.elementPending = true;
     if (fx.special === 'mark') P.markPending = true;
+    if (fx.special === 'dmark') P.dmark = 'цель';
+    if (fx.special === 'toxins') { const r = d(4) + 1; P.toxins = Math.min(99, num(P.toxins) + r); addLog(`Токсичные смеси: +${r} жетонов (1d4+1), всего ${P.toxins}`); }
   }
   addLog(`${esc(name)}${kind === 'hope' ? ` (−${HOP(n)})` : kind === 'stress' ? ` (+${STR(n)})` : ''}${over ? `, Стресс переполнен: +${RAN(over)}` : ''}`);
   refreshTrackers();
@@ -354,6 +359,8 @@ function endEffects(kind) { /* kind: rest | long */
   const P = C.play; P.fx = P.fx || {};
   ['attack1', 'rogueDodge', 'element', 'earth', 'transcend', 'swarm', 'retract', 'tava', 'tr'].forEach((k) => delete P.fx[k]);
   P.impenUsed = false; P.unstoppable = 0; /* сцена закончилась */
+  P.dmark = ''; P.firstStrike = false; /* Метка Смерти — до следующего отдыха */
+  if (kind === 'long') P.toxins = 0; /* Токсичные смеси */
   P.uses = Object.fromEntries(Object.entries(P.uses || {}).filter(([k]) => { const c = featLimitOf(k); return !(c.limit === 'rest' || (kind === 'long' && c.limit === 'long')); }));
   if (kind === 'long' && P.companion) { if (num(P.companion.stress) >= companionStressMax()) P.companion.stress = companionStressMax() - 1; }
 }
@@ -465,6 +472,18 @@ function mechanicsHTML(x) {
     parts.push(`<div class="mech"><b>Метка Следопыта</b><div class="row small"><input id="mark-t" data-bind="play.mark" value="${esc(P.mark || '')}" placeholder="кто под Меткой" style="flex:1;min-width:140px">${P.mark ? '<button class="ghost" data-act="mark-clear">Снять</button>' : ''}</div>
       ${P.mark ? '<div class="small muted">Когда наносишь ей урон, она отмечает Стресс. При провале атаки по ней можно снять Метку и перебросить Кости Дуальности.</div>' : ''}</div>`);
   }
+  if (hasF('Метка Смерти')) {
+    const die = deathDie(x);
+    parts.push(`<div class="mech"><b>Метка Смерти</b> <span class="chip">+${x.tier}d${die} к урону</span>
+      <div class="row small"><input id="dmark-t" data-bind="play.dmark" value="${esc(P.dmark || '')}" placeholder="кто под Меткой" style="flex:1;min-width:140px">${P.dmark ? '<button class="ghost" data-act="dmark-clear">Цель побеждена / снята</button>' : ''}</div>
+      <div class="small muted">${P.dmark ? `По этой цели урон получает +${x.tier}d${die} (галочка в настройках урона).${x.hasSub('Поза скорпиона') ? ' Против её атак Уклонение +2.' : ''} Метка держится до отдыха; Мастер может снять её за ${x.tier} Страха.` : 'После успешной атаки оружием отметь Стресс у свойства «Метка Смерти» ниже. Метка бывает только на одной цели.'}</div></div>`);
+  }
+  if (x.hasSub('Токсичные смеси')) {
+    const known = poisonsKnown(x), t = num(P.toxins);
+    parts.push(`<div class="mech"><b>Токсичные смеси</b> <span class="chip ${t ? 'accent' : ''}">жетонов: ${t}</span>
+      <div class="small muted">Отметь Стресс у свойства ниже: +1d4+1 жетонов. При успешной атаке оружием потрать жетон, чтобы отравить цель.${x.hasSub('Двойной клык') ? ' «Двойной клык»: по цели с Меткой Смерти второй жетон — второй яд.' : ''} Продолжительный отдых сжигает все жетоны.</div>
+      <div class="stack" style="gap:3px">${known.map(([n, eff, dmg]) => `<div class="row small"><button class="small" data-poison="${esc(n)}" ${t ? '' : 'disabled'}>${esc(n)}</button><span>${esc(eff)}${dmg ? ' <span class="muted">(или галочкой в настройках урона)</span>' : ''}</span></div>`).join('')}</div></div>`);
+  }
   if (x.hasSub('Компаньон')) parts.push(companionHTML(x));
   if (hasF('Звериная Форма')) {
     const forms = D.beastforms.filter((b) => b.tier <= x.tier);
@@ -492,6 +511,19 @@ function mechanicsHTML(x) {
   if (!parts.length) return '';
   return `<section class="panel"><h2>Механики класса</h2>${parts.join('')}<div class="err" id="mech-err"></div></section>`;
 }
+/* ---------- Ассасин ---------- */
+function deathDie(x) { return x.hasSub('Удар в спину') ? 8 : x.hasSub('Внезапная атака') ? 6 : 4; }
+const POISONS = [
+  ['Призрачный Лепесток', 'цель временно Уязвима', 'Токсичные смеси'],
+  ['Могильная Спора', 'цель отмечает Стресс', 'Токсичные смеси'],
+  ['Плющ Пиявки', '+1d6 к урону этой атаки', 'Токсичные смеси', 'ivy'],
+  ['Полуночная Лоза', 'цель атакует с помехой, может отметить Стресс, чтобы очиститься', 'Сборник ядов'],
+  ['Корень Горгоны', 'цель временно Обездвижена', 'Сборник ядов'],
+  ['Семя Гнили', 'пороги урона цели −3 до конца сцены (не суммируется)', 'Веномант'],
+  ['Лист Страха', 'урон этой атаки + результат Кости Страха', 'Веномант', 'fear'],
+  ['Трупный Терновник', 'цель делает броски реакции с помехой до конца сцены', 'Веномант'],
+];
+function poisonsKnown(x) { return POISONS.filter((p) => x.hasSub(p[2])).map((p) => [p[0], p[1], p[3]]); }
 function companionHTML(x) {
   const P = C.play; P.companion = P.companion || { name: '', exp1: '', exp2: '', stress: 0, die: 'd6' };
   const c = P.companion, max = companionStressMax();
@@ -638,6 +670,13 @@ function dmgOptsHTML(x) {
   sec.forEach((f) => { const m = strip(f.text).match(/\+(\d+)\s*к урону основного/); if (m) o.push(`<label class="row small"><input type="checkbox" id="d-pair" data-v="${m[1]}"> ${esc(f.name)}: +${m[1]} по цели вплотную к тебе</label>`); });
   if (x.hasSub('Адреналин') && P.cond?.vulnerable) o.push(`<span class="small chip ok">Адреналин: +${x.L} к урону, пока Уязвим</span>`);
   if (P.unstoppable) o.push(`<span class="small chip ok">Неудержимый: +${P.unstoppable} к урону</span>`);
+  if (P.dmark && x.cls?.features.some((f) => f.name === 'Метка Смерти')) o.push(`<label class="row small"><input type="checkbox" id="d-dmark" checked> Цель с Меткой Смерти (${esc(P.dmark)}): +${x.tier}d${deathDie(x)}</label>`);
+  if (x.hasSub('Первый удар')) o.push(`<label class="row small"><input type="checkbox" id="d-first" ${P.firstStrike ? '' : 'checked'}> Первый удар: первая успешная атака в сцене, урон ×2</label>`);
+  if (x.hasSub('Токсичные смеси') && num(P.toxins)) {
+    o.push(`<label class="row small"><input type="checkbox" id="d-ivy"> Плющ Пиявки: +1d6 (1 жетон, осталось ${num(P.toxins)})</label>`);
+    if (x.hasSub('Веномант')) { const f = lastDual?.attack ? lastDual.f : null; o.push(`<label class="row small"><input type="checkbox" id="d-fearleaf" data-v="${f || ''}"> Лист Страха: + Кость Страха${f ? ` (${f})` : ' (бросок атаки не найден — будет d12)'} (1 жетон)</label>`); }
+  }
+  if (x.hasSub('Смертельный удар')) o.push('<span class="small muted">Смертельный удар: если цель получит Тяжёлый урон, отметь Стресс — она отметит ещё Рану.</span>');
   if (!o.length) return '';
   return `<details ${o.length ? 'open' : ''}><summary>Настройки урона</summary><div class="stack" style="gap:3px">${o.join('')}</div></details>`;
 }
@@ -648,6 +687,8 @@ function rollDamage(id, crit, override) {
   let hope = 0, stress = 0;
   if (ch('d-tusks')) hope++; if (ch('d-wings')) hope++; if (ch('d-elem')) hope++; if (ch('d-pred')) stress++;
   if (hope > num(P.hope)) { if (err) err.textContent = `Не хватает Надежды: нужно ${hope}, есть ${P.hope}.`; return; }
+  const toxinsNeed = (ch('d-ivy') ? 1 : 0) + (ch('d-fearleaf') ? 1 : 0);
+  if (toxinsNeed > num(P.toxins)) { if (err) err.textContent = `Не хватает жетонов яда: нужно ${toxinsNeed}.`; return; }
   const sides = num((w.die.match(/d(\d+)/) || [])[1]);
   const n = Math.max(1, x.prof + (ch('d-pred') ? 1 : 0));
   const parts = [];
@@ -669,7 +710,12 @@ function rollDamage(id, crit, override) {
   if (ch('d-pair')) add(num(g('d-pair').dataset.v), 'вспомогательное оружие');
   if (x.hasSub('Адреналин') && P.cond?.vulnerable) add(x.L, 'Адреналин');
   if (P.unstoppable) add(P.unstoppable, 'Неудержимость');
+  if (ch('d-dmark') && P.dmark) { const r = Array.from({ length: x.tier }, () => d(deathDie(x))); add(r.reduce((s, v) => s + v, 0), `Метка Смерти ${x.tier}d${deathDie(x)} [${r.join(',')}]`); }
+  if (ch('d-ivy')) add(d(6), 'Плющ Пиявки');
+  if (ch('d-fearleaf')) add(num(g('d-fearleaf').dataset.v) || d(12), 'Лист Страха');
+  P.toxins = num(P.toxins) - toxinsNeed;
   if (!override && (P.fx?.nextDmg || []).length) { for (const ex of P.fx.nextDmg) { const r = rollExpr(ex); add(r.v, `${ex} (расходник)`); } P.fx.nextDmg = []; }
+  if (ch('d-first')) { parts.push(`Первый удар ×2: ${total} → ${total * 2}`); total *= 2; P.firstStrike = true; }
   let extraMag = '';
   if (P.lastAttackFear && x.hasSub('Победи свой страх')) { const r = d(10); extraMag = ` + ${r} магического (Победи свой страх)`; P.lastAttackFear = false; }
   P.hope = num(P.hope) - hope; if (stress) markStress(stress, x);
@@ -677,7 +723,7 @@ function rollDamage(id, crit, override) {
   showVerdict(`<div class="total">${total}${extraMag ? `<span class="small"> ${esc(extraMag)}</span>` : ''}</div><div class="how">${crit ? 'Критический урон' : 'Урон'}: ${esc(w.name)}</div><div class="math">${esc(math)} · ${w.magic ? 'магический' : 'физический'}</div>`);
   addLog(`Урон ${esc(w.name)}: <b class="mono">${total}</b>${esc(extraMag)} <span class="muted">(${esc(math)})</span>`);
   if (P.mark) addLog(`Если цель — ${esc(P.mark)} (под Меткой), она отмечает Стресс.`);
-  ['d-tusks', 'd-wings', 'd-elem', 'd-pred', 'd-rally', 'd-pair'].forEach((k) => { if (g(k)) g(k).checked = false; });
+  ['d-tusks', 'd-wings', 'd-elem', 'd-pred', 'd-rally', 'd-pair', 'd-ivy', 'd-fearleaf'].forEach((k) => { if (g(k)) g(k).checked = false; });
   refreshTrackers();
 }
 
@@ -770,6 +816,7 @@ document.addEventListener('click', (e) => {
   if (b.dataset.unuse) { P.uses[b.dataset.unuse] = Math.max(0, num(P.uses[b.dataset.unuse]) - 1); return refreshTrackers(); }
   if (b.dataset.cond) { P.cond[b.dataset.cond] = !P.cond[b.dataset.cond]; return refreshTrackers(); }
   if (b.dataset.post) return postRoll(b.dataset.post);
+  if (b.dataset.poison) { if (!num(P.toxins)) return mechErr('Нет жетонов: отметь Стресс у «Токсичных смесей».'); P.toxins--; const p = POISONS.find((q) => q[0] === b.dataset.poison); addLog(`Яд «${esc(p[0])}»${P.dmark ? ` на ${esc(P.dmark)}` : ''}: ${esc(p[1])}. Осталось жетонов: ${P.toxins}`); return refreshTrackers(); }
   if (b.dataset.element) { P.fx.element = b.dataset.element; P.fx.earth = b.dataset.element === 'Земля'; P.elementPending = false; addLog(`Стихийное воплощение: ${b.dataset.element}`); return refreshTrackers(); }
   if (b.dataset.compBox != null) { const i = +b.dataset.compBox; P.companion.stress = num(P.companion.stress) === i + 1 ? i : i + 1; return refreshTrackers(); }
   if (b.dataset.pray != null) {
@@ -806,6 +853,7 @@ document.addEventListener('click', (e) => {
   if (act === 'unst-end') { P.unstoppable = 0; addLog('Неудержимость закончилась'); return refreshTrackers(); }
   if (act === 'rally-stress') { const r = d(P.rally); P.stress = Math.max(0, num(P.stress) - r); P.rally = 0; addLog(`Кость Сплочения: −${STR(r)}`); return refreshTrackers(); }
   if (act === 'mark-clear') { P.mark = ''; return refreshTrackers(); }
+  if (act === 'dmark-clear') { addLog(`Метка Смерти снята${P.dmark ? ': ' + esc(P.dmark) : ''}`); P.dmark = ''; return refreshTrackers(); }
   if (act === 'beast-enter') { const id = document.getElementById('beast-pick').value; P.beast = id; P.evolveTrait = P.beastPending === 'evolve' ? document.getElementById('evolve-trait').value : ''; P.beastPending = ''; addLog(`Звериная форма: ${esc(D.beastforms.find((q) => q.id === id)?.name || '')}`); return refreshTrackers(); }
   if (act === 'beast-cancel') { P.beastPending = ''; return refreshTrackers(); }
   if (act === 'beast-exit') { P.beast = ''; P.evolveTrait = ''; addLog('Выход из звериной формы'); return refreshTrackers(); }

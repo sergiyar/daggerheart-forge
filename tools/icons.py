@@ -13,7 +13,8 @@ WANT = {
     # классы
     'cls-bard': ['lyre', 'harp'], 'cls-druid': ['wolf-head', 'oak'], 'cls-guardian': ['checked-shield'],
     'cls-ranger': ['high-shot', 'pocket-bow'], 'cls-rogue': ['hood', 'cloak-dagger'], 'cls-seraph': ['angel-wings', 'winged-sword'],
-    'cls-sorcerer': ['fire-ray', 'magic-swirl'], 'cls-warrior': ['crossed-swords'], 'cls-wizard': ['pointy-hat', 'wizard-staff'],
+    'cls-sorcerer': ['fire-ray', 'magic-swirl'], 'cls-warrior': ['crossed-swords'], 'cls-wizard': ['pointy-hat', 'wizard-staff'], 'cls-assassin': ['hooded-assassin', 'stiletto'],
+    'i-poison': ['poison-bottle'],
     # домены
     'dm-arcana': ['magic-swirl'], 'dm-blade': ['broadsword'], 'dm-bone': ['crossed-bones'], 'dm-codex': ['spell-book'],
     'dm-grace': ['rose'], 'dm-midnight': ['moon', 'night-sky'], 'dm-sage': ['oak-leaf', 'leaf-swirl'],

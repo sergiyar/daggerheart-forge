@@ -19,6 +19,7 @@ const POOL = [2, 1, 1, 0, 0, -1];
 
 /* ---------- гайды и советы (собственные тексты конструктора) ---------- */
 const ROLE = {
+  assassin: 'Наёмный убийца: метит жертву Меткой Смерти и добивает её, мастер засад и ядов.',
   bard: 'Душа компании и поддержка: вдохновляет союзников костями Сплочения, силён в разговоре и магии слова.',
   druid: 'Превращается в зверей и управляет природой. Гибкий: разведка, бой в звериной форме, лечение или стихии.',
   guardian: 'Танк. Держит удар, прикрывает союзников и не даёт врагам пройти.',
@@ -42,6 +43,7 @@ const DOMAIN_INFO = {
 };
 /* Типичные раскладки — подсказка конструктора, не официальная таблица. */
 const LAYOUT = {
+  assassin: { agi: 2, fin: 1, kno: 1, ins: 0, pre: 0, str: -1 },
   bard: { pre: 2, fin: 1, kno: 1, agi: 0, ins: 0, str: -1 },
   druid: { ins: 2, agi: 1, pre: 1, str: 0, kno: 0, fin: -1 },
   guardian: { str: 2, agi: 1, pre: 1, ins: 0, kno: 0, fin: -1 },
@@ -245,6 +247,7 @@ function derive() {
   if (hasSub('Призыв щита')) evaCond.push(`+${prof} пока у тебя 2+ Надежды (Школа войны: Призыв щита)`);
   if (hasSub('Связанные битвой')) evaCond.push('+2 против врага рядом с компаньоном');
   if (hasSub('Неуловимый хищник')) evaCond.push('+2 против цели с твоей Меткой');
+  if (hasSub('Поза скорпиона')) evaCond.push(`+2 против атак цели с Меткой Смерти${C.play.dmark ? ` (${C.play.dmark})` : ''}`);
   if (has('Крылья')) evaCond.push('+2 за Стресс, когда летишь');
 
   const hp = { parts: [] };
@@ -373,12 +376,12 @@ function renderSummary(x) {
 /* --- шаг: класс --- */
 function stepClass(x) {
   const grid = D.classes.map((c) => `<button class="choice" data-pick="classId" data-val="${c.id}" aria-pressed="${C.classId === c.id}">
-      <span class="choice-head">${clsIcon(c)}<h3>${esc(c.name)}</h3></span><span class="tagline">${esc(ROLE[c.id] || strip(c.tagline))}</span>
+      <span class="choice-head">${clsIcon(c)}<h3>${esc(c.name)}</h3>${c.source ? `<span class="chip warn small" title="Класс из дополнения, вошёл в SRD 2.0">${esc(c.source)}</span>` : ''}</span><span class="tagline">${esc(ROLE[c.id] || strip(c.tagline))}</span>
       <span class="chips">${c.domains.map((dm) => `<span class="chip dm" style="--c:var(--dm-${dm})">${esc(D.domains[dm])}</span>`).join('')}<span class="chip">Уклонение ${c.evasion}</span><span class="chip">Раны ${c.hp}</span></span></button>`).join('');
   let det = '';
   if (x.cls) {
     const c = x.cls;
-    det = `<div class="detail"><div class="spread"><span class="choice-head">${clsIcon(c, 'lg')}<h2>${esc(c.name)}</h2></span><span class="row">${site('/class/' + c.id, 'Арт и описание на сайте')}</span></div>
+    det = `<div class="detail"><div class="spread"><span class="choice-head">${clsIcon(c, 'lg')}<h2>${esc(c.name)}</h2></span><span class="row">${site('/class/' + (c.slug || c.id), 'Арт и описание на сайте')}</span></div>
       <div class="rich muted">${c.intro}</div>
       <div class="impact"><div><span class="lbl">Уклонение</span><b>${c.evasion}</b><span class="small muted">База защиты</span></div><div><span class="lbl">Ячейки Ран</span><b>${c.hp}</b><span class="small muted">Сколько ран выдержишь</span></div>
       ${c.domains.map((dm) => `<div><span class="row" style="gap:6px">${dmIcon(dm)}<span class="lbl">${esc(D.domains[dm])}</span></span><span class="small" style="display:block">${DOMAIN_INFO[dm]}</span></div>`).join('')}</div>
@@ -696,7 +699,7 @@ function renderRef() {
   return `<div class="stack"><h1>Справочник</h1><input id="ref-q" placeholder="Поиск: правило, карта, оружие, предмет, родословная…" value="${esc(refQuery)}" aria-label="Поиск по справочнику">
     <div class="row" role="group" aria-label="Тип">${REF_TYPES.map(([k, n]) => `<button class="chipbtn ${refType === k ? 'sel' : ''}" data-reftype="${k}" aria-pressed="${refType === k}">${n}</button>`).join('')}</div>
     <div id="ref-res">${refResults()}</div><dialog id="ref-dlg" aria-label="Карточка справочника"></dialog>
-    <p class="foot">Данные: Daggerheart SRD 1.0 в переводе ru.daggerheart.su. This product includes materials from the Daggerheart System Reference Document 1.0, © Critical Role, LLC, under the terms of the Darrington Press Community Gaming (DPCGL) License. Неофициальный фанатский инструмент. Иконки: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a>, CC BY 3.0, авторы: ${(window.DH_ICON_AUTHORS || []).map(esc).join(', ')}. Оригинальный арт смотри по ссылкам «На сайте».</p></div>`;
+    <p class="foot">Данные: Daggerheart SRD 1.0 и 2.0 (класс «Ассасин» из Hope &amp; Fear) в переводе ru.daggerheart.su. This product includes materials from the Daggerheart System Reference Document 1.0 and 2.0, © Critical Role, LLC, under the terms of the Darrington Press Community Gaming (DPCGL) License. Неофициальный фанатский инструмент. Иконки: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a>, CC BY 3.0, авторы: ${(window.DH_ICON_AUTHORS || []).map(esc).join(', ')}. Оригинальный арт смотри по ссылкам «На сайте».</p></div>`;
 }
 let REF_INDEX = null, REF_SHOWN = [], refOpenIdx = -1;
 function refOpen(i) {
