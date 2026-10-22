@@ -417,7 +417,24 @@ function condHTML(x) {
 }
 
 /* ================= КЛАССОВЫЕ МЕХАНИКИ ================= */
-function companionStressMax() { const c = C.play.companion || {}; return 3 + (c.resilient ? 1 : 0); }
+const COMP_UP = [
+  ['smart', 'Умный', '+1 к одному Опыту компаньона'],
+  ['light', 'Свет во тьме', 'дополнительная ячейка Надежды для тебя'],
+  ['comfort', 'Утешение', 'раз до отдыха: Надежда тебе или оба снимаете Стресс'],
+  ['armored', 'Бронированный', 'урон по компаньону можно принять на свою ячейку брони'],
+  ['fierce', 'Свирепый', 'кость урона или дистанция компаньона на шаг больше'],
+  ['resilient', 'Устойчивый', '+1 ячейка Стресса компаньона'],
+  ['bonded', 'Связанные', 'на твоей последней Ране компаньон может поднять тебя'],
+  ['wary', 'Осторожность', '+2 к Уклонению компаньона'],
+];
+function compState() {
+  const st = { ups: [], smart: [], fierce: 0 };
+  for (let lv = 2; lv <= num(C.level); lv++) { const e = (C.levels || {})[lv]; if (e?.comp) { st.ups.push(e.comp); if (e.comp === 'smart') st.smart.push(e.compExp); if (e.comp === 'fierce') st.fierce++; } }
+  return st;
+}
+const compHas = (k) => compState().ups.includes(k);
+function companionStressMax() { return 3 + (compHas('resilient') ? 1 : 0); }
+function compDie() { return ['d6', 'd8', 'd10', 'd12'][Math.min(3, compState().fierce)]; }
 function mechanicsHTML(x) {
   if (!x.cls) return '';
   const P = C.play, parts = [];
@@ -481,7 +498,8 @@ function companionHTML(x) {
   let boxes = ''; for (let i = 0; i < max; i++) boxes += `<button class="box stress ${i < num(c.stress) ? 'on' : ''}" data-comp-box="${i}" aria-label="Стресс компаньона ${i + 1}"></button>`;
   return `<div class="mech"><b>${term('ranger-companion', 'Компаньон')}</b>
     <div class="impact"><label><span class="lbl">Имя и зверь</span><input id="comp-name" data-bind="play.companion.name" value="${esc(c.name)}"></label><label><span class="lbl">Опыт +2</span><input id="comp-e1" data-bind="play.companion.exp1" value="${esc(c.exp1)}"></label><label><span class="lbl">Опыт +2</span><input id="comp-e2" data-bind="play.companion.exp2" value="${esc(c.exp2)}"></label></div>
-    <div class="small">Уклонение ${10 + (c.wary ? 2 : 0)} · атака Вплотную, ${x.prof}${esc(c.die || 'd6')} · Стресс ${num(c.stress)} / ${max}</div><div class="boxes">${boxes}</div>
+    <div class="small">Уклонение ${10 + (compHas('wary') ? 2 : 0)} · атака Вплотную, ${x.prof}${compDie()} · Стресс ${num(c.stress)} / ${max} · Опыт: ${esc(c.exp1 || '—')} ${sign(2 + compState().smart.filter((q) => q === 1).length)}, ${esc(c.exp2 || '—')} ${sign(2 + compState().smart.filter((q) => q === 2).length)}</div><div class="boxes">${boxes}</div>
+    ${compState().ups.length ? `<div class="small">Улучшения: ${compState().ups.map((k) => COMP_UP.find((u) => u[0] === k)?.[1]).join(', ')}</div>` : ''}
     <div class="small muted">Приказ компаньону: Бросок Заклинания, Опыт компаньона за Надежду. Любой урон по нему = 1 Стресс; на последнем Стрессе он уходит до продолжительного отдыха.</div></div>`;
 }
 
@@ -691,6 +709,11 @@ function levelHTML(x) {
     return `<div class="row" style="flex-wrap:nowrap;align-items:stretch"><button class="opt check" style="flex:1" data-lvl-opt="${a.id}" aria-pressed="${picked > 0}" ${disabled && !picked ? 'disabled' : ''}><span class="radio"></span><span class="stack" style="gap:2px"><span>${a.t}${picked > 1 ? ` ×${picked}` : ''}</span><span class="small muted">${a.slots[t] ? `в ранге ${t} осталось ${Math.max(0, rem)} из ${a.slots[t]}` : 'недоступно в этом ранге'}${fromT && fromT < t ? `, можно взять из ранга ${fromT}` : ''}${a.unsupported ? ' · конструктор пока не умеет, отметь вручную' : ''}</span></span></button>${more ? `<button class="small" data-lvl-more="${a.id}">ещё раз</button>` : ''}</div>`;
   }).join('');
   const sub = [];
+  if (x.hasSub('Компаньон')) {
+    const taken = compState().ups;
+    sub.push(`<div><b>Улучшение компаньона</b> <span class="small muted">(обязательно, одно за уровень)</span><div class="optlist">${COMP_UP.map(([k, n, d0]) => { const dis = taken.includes(k) && k !== 'smart' && k !== 'fierce'; return `<button class="opt" data-lvl-comp="${k}" aria-pressed="${dr.comp === k}" ${dis ? 'disabled' : ''}><span class="radio"></span><span><b>${n}</b> <span class="small muted">— ${d0}${dis ? ' (уже взято)' : ''}</span></span></button>`; }).join('')}</div>
+      ${dr.comp === 'smart' ? `<div class="row small">Какой Опыт: <label class="row"><input type="radio" name="cexp" data-lvl-cexp="1" ${dr.compExp === 1 ? 'checked' : ''}> ${esc(C.play.companion?.exp1 || 'первый')}</label><label class="row"><input type="radio" name="cexp" data-lvl-cexp="2" ${dr.compExp === 2 ? 'checked' : ''}> ${esc(C.play.companion?.exp2 || 'второй')}</label></div>` : ''}</div>`);
+  }
   if (dr.opts.includes('traits')) {
     const n = dr.opts.filter((o) => o === 'traits').length * 2;
     sub.push(`<div><b>Какие характеристики +1</b> <span class="small muted">(выбери ${n}; отмеченные в этом ранге недоступны до ${t < 3 ? 5 : t < 4 ? 8 : '—'} уровня)</span><div class="row">${TR.map(([k, nm]) => { const marked = st.marked.has(k) && !(next === 5 || next === 8); return `<label class="row small"><input type="checkbox" data-lvl-trait="${k}" ${dr.traits.includes(k) ? 'checked' : ''} ${marked ? 'disabled' : ''}> ${nm}${marked ? ' (отмечена)' : ''}</label>`; }).join('')}</div></div>`);
@@ -699,7 +722,7 @@ function levelHTML(x) {
   const cardOpts = (sel, id) => `<select id="${id}" data-lvl-card="${id}"><option value="">— выбери —</option>${D.cards.filter((c) => x.cls.domains.includes(c.domain) && c.level <= next && !C.cards.includes(c.id) && !C.vault.includes(c.id)).sort((a, b) => b.level - a.level || a.name.localeCompare(b.name, 'ru')).map((c) => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>ур. ${c.level} · ${esc(c.name)} · ${esc(D.domains[c.domain])}</option>`).join('')}</select>`;
   if (dr.opts.includes('card')) sub.push(`<div><b>Дополнительная карта</b> ${cardOpts(dr.extraCard, 'lvl-extra')}</div>`);
   if (dr.opts.includes('sub')) sub.push(`<div class="small"><b>Подкласс:</b> откроется ${x.LV.sub === 0 ? 'Специализация' : 'Мастерство'}: ${(x.sub?.[x.LV.sub === 0 ? 'specialization' : 'mastery'] || []).map((f) => esc(f.name)).join(', ')}</div>`);
-  const ready = slotsUsed === 2 && (!dr.opts.includes('traits') || dr.traits.length === dr.opts.filter((o) => o === 'traits').length * 2) && (!dr.opts.includes('exp') || dr.exps.length === 2) && (!dr.opts.includes('card') || dr.extraCard) && dr.card && (!ach || dr.newExp.trim()) && (!dr.swapFrom || dr.swapTo);
+  const ready = slotsUsed === 2 && (!dr.opts.includes('traits') || dr.traits.length === dr.opts.filter((o) => o === 'traits').length * 2) && (!dr.opts.includes('exp') || dr.exps.length === 2) && (!dr.opts.includes('card') || dr.extraCard) && dr.card && (!ach || dr.newExp.trim()) && (!dr.swapFrom || dr.swapTo) && (!x.hasSub('Компаньон') || (dr.comp && (dr.comp !== 'smart' || dr.compExp)));
   return `<section class="panel" id="lvl-panel"><h2>Повышение до ${next} уровня</h2>
     <div class="stack"><div><span class="lbl">Шаг 1 · Достижения ранга</span>${ach ? `<div class="small">На ${next} уровне: новый Опыт +2, Мастерство +1${next > 2 ? ', снимаются все отметки с характеристик' : ''}.</div><input id="lvl-newexp" data-lvl-newexp value="${esc(dr.newExp)}" placeholder="Новый Опыт">` : '<div class="small muted">На этом уровне достижений нет.</div>'}</div>
     <div><span class="lbl">Шаг 2 · Два улучшения</span> <span class="small">${slotsUsed} из 2</span><div class="optlist">${optRows}</div></div>
@@ -718,7 +741,7 @@ function levelHistoryHTML(x) {
 function lvlApply() {
   const x = derive(), next = x.L + 1, dr = lvlDraft;
   C.levels = C.levels || {};
-  C.levels[next] = { opts: dr.opts, from: dr.from, traits: dr.traits, exps: dr.exps, newExp: dr.newExp.trim(), card: dr.card, extraCard: dr.extraCard, swap: dr.swapFrom && dr.swapTo ? { from: dr.swapFrom, to: dr.swapTo } : null };
+  C.levels[next] = { opts: dr.opts, from: dr.from, traits: dr.traits, exps: dr.exps, newExp: dr.newExp.trim(), card: dr.card, extraCard: dr.extraCard, swap: dr.swapFrom && dr.swapTo ? { from: dr.swapFrom, to: dr.swapTo } : null, comp: dr.comp || null, compExp: dr.compExp || null };
   if (dr.swapFrom && dr.swapTo) { C.cards = C.cards.map((c) => (c === dr.swapFrom ? dr.swapTo : c)); C.vault = C.vault.map((c) => (c === dr.swapFrom ? dr.swapTo : c)); }
   for (const id of [dr.card, dr.extraCard].filter(Boolean)) { if (C.cards.length < 5) C.cards.push(id); else C.vault.push(id); }
   C.level = next; lvlDraft = null;
@@ -756,6 +779,7 @@ document.addEventListener('click', (e) => {
     if (b.dataset.how === 'spend') addLog(`Кость Молитвы (${v}) потрачена`);
     P.prayer.splice(i, 1); return refreshTrackers();
   }
+  if (b.dataset.lvlComp) { lvlDraft.comp = b.dataset.lvlComp; if (lvlDraft.comp !== 'smart') lvlDraft.compExp = null; return keepScroll(render); }
   if (b.dataset.lvlOpt || b.dataset.lvlMore) {
     const id = b.dataset.lvlOpt || b.dataset.lvlMore, dr = lvlDraft, t = tierOf(x().L + 1), a = ADV.find((q) => q.id === id);
     const used = dr.opts.reduce((s2, o) => s2 + (ADV.find((q) => q.id === o).double ? 2 : 1), 0);
@@ -796,6 +820,7 @@ document.addEventListener('change', (e) => {
   if (!lvlDraft) return;
   if (el.dataset.lvlTrait) { const k = el.dataset.lvlTrait, n = lvlDraft.opts.filter((o) => o === 'traits').length * 2; lvlDraft.traits = lvlDraft.traits.filter((q) => q !== k); if (el.checked) { if (lvlDraft.traits.length < n) lvlDraft.traits.push(k); else el.checked = false; } return keepScroll(render); }
   if (el.dataset.lvlExp) { const i = +el.dataset.lvlExp; lvlDraft.exps = lvlDraft.exps.filter((q) => q !== i); if (el.checked) { if (lvlDraft.exps.length < 2) lvlDraft.exps.push(i); else el.checked = false; } return keepScroll(render); }
+  if (el.dataset.lvlCexp) { lvlDraft.compExp = +el.dataset.lvlCexp; return keepScroll(render); }
   if (el.dataset.lvlSwap) { if (el.dataset.lvlSwap === 'from') { lvlDraft.swapFrom = el.value; lvlDraft.swapTo = ''; } else lvlDraft.swapTo = el.value; return keepScroll(render); }
   if (el.dataset.lvlCard) { if (el.id === 'lvl-card') lvlDraft.card = el.value; else lvlDraft.extraCard = el.value; return keepScroll(render); }
 });

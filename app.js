@@ -294,7 +294,7 @@ function derive() {
   const spellKey = sub?.spellcast ? SPELL[sub.spellcast] : null;
   const allExps = [...C.experiences, ...LV.newExps.map((n) => ({ name: n, mod: 2, fromLevel: true }))];
   const exps = allExps.map((e, i) => ({ ...e, mod: num(e.mod) + (LV.exps[i] || 0) + (has('Целенаправленный дизайн') && i === num(C.clankExp) ? 1 : 0) }));
-  const hopeMax = Math.max(0, 6 - num(C.play.scars) + (C.play.companion?.lightInDark ? 1 : 0));
+  const hopeMax = Math.max(0, 6 - num(C.play.scars) + (typeof compHas === 'function' && compHas('light') ? 1 : 0));
   const extraCards = sub ? sub.foundation.filter((f) => /дополнительную\s*Карту Домена/i.test(strip(f.text))).length : 0;
   return { LV, beast, bst, hopeMax, bare, cls, sub, subFeats, hasSub, inHand, armFeat, fx, tier, a1, a2, ancFeats, has, com, L, prof, pw, sw, arm, eva, evaCond, hp, stress, ar, thr, traits, spellKey, exps, cardsNeeded: 2 + extraCards, sumOf };
 }
